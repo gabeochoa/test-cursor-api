@@ -1,0 +1,9 @@
+**/.git/**
+**/.vscode/**
+**/node_modules/**
+src/**
+cursor-cloud-agent-endpoints.html
+*.ts
+tsconfig.json
+eslint.config.*
+

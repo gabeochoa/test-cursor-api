@@ -1,0 +1,101 @@
+{
+  "name": "cursor-bmad-cloud-workflows",
+  "displayName": "BMAD Workflows (Cloud Agents)",
+  "description": "Run installed BMAD workflows via Cursor Cloud Agents API, with a UI panel for launching and interacting with runs.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:bmadCloud.openPanel",
+    "onCommand:bmadCloud.runWorkflow",
+    "onCommand:bmadCloud.stopRun",
+    "onCommand:bmadCloud.sendFollowup",
+    "onCommand:bmadCloud.setApiKey"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "bmadCloud.openPanel",
+        "title": "BMAD Cloud: Open Workflows Panel"
+      },
+      {
+        "command": "bmadCloud.runWorkflow",
+        "title": "BMAD Cloud: Run Workflow"
+      },
+      {
+        "command": "bmadCloud.sendFollowup",
+        "title": "BMAD Cloud: Send Follow-up"
+      },
+      {
+        "command": "bmadCloud.stopRun",
+        "title": "BMAD Cloud: Stop Run"
+      },
+      {
+        "command": "bmadCloud.setApiKey",
+        "title": "BMAD Cloud: Set API Key (Secure Storage)"
+      }
+    ],
+    "configuration": {
+      "title": "BMAD Cloud",
+      "properties": {
+        "bmadCloud.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Cursor Cloud Agents API key. Warning: VS Code/Cursor settings are stored in plain text. Prefer using the command 'BMAD Cloud: Set API Key (Secure Storage)'."
+        },
+        "bmadCloud.apiBaseUrl": {
+          "type": "string",
+          "default": "https://api.cursor.com",
+          "description": "Base URL for Cursor Cloud Agents API."
+        },
+        "bmadCloud.model": {
+          "type": "string",
+          "default": "",
+          "description": "Optional model name for cloud agents. Leave empty for Auto."
+        },
+        "bmadCloud.autoCreatePr": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the agent should auto-create a PR when it completes."
+        },
+        "bmadCloud.openAsCursorGithubApp": {
+          "type": "boolean",
+          "default": false,
+          "description": "Only if autoCreatePr is true: open the PR as the Cursor GitHub App."
+        },
+        "bmadCloud.skipReviewerRequest": {
+          "type": "boolean",
+          "default": false,
+          "description": "Only if autoCreatePr is true and openAsCursorGithubApp is true: skip requesting you as reviewer."
+        },
+        "bmadCloud.pollIntervalMs": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 500,
+          "description": "Polling interval for refreshing agent status and conversation."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . -w",
+    "lint": "eslint .",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/vscode": "^1.92.0",
+    "eslint": "^9.17.0",
+    "typescript": "^5.7.2"
+  }
+}
+
