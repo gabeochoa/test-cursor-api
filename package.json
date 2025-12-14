@@ -16,7 +16,8 @@
     "onCommand:bmadCloud.openPanel",
     "onCommand:bmadCloud.runWorkflow",
     "onCommand:bmadCloud.stopRun",
-    "onCommand:bmadCloud.sendFollowup"
+    "onCommand:bmadCloud.sendFollowup",
+    "onCommand:bmadCloud.setApiKey"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -36,11 +37,20 @@
       {
         "command": "bmadCloud.stopRun",
         "title": "BMAD Cloud: Stop Run"
+      },
+      {
+        "command": "bmadCloud.setApiKey",
+        "title": "BMAD Cloud: Set API Key (Secure Storage)"
       }
     ],
     "configuration": {
       "title": "BMAD Cloud",
       "properties": {
+        "bmadCloud.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Cursor Cloud Agents API key. Warning: VS Code/Cursor settings are stored in plain text. Prefer using the command 'BMAD Cloud: Set API Key (Secure Storage)'."
+        },
         "bmadCloud.apiBaseUrl": {
           "type": "string",
           "default": "https://api.cursor.com",
