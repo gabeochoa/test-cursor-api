@@ -379,6 +379,15 @@ function vibrate(pattern) {
   }
 }
 
+function pulseBoard(className, ms) {
+  boardEl.classList.remove(className);
+  // force reflow to restart animation
+  // eslint-disable-next-line no-unused-expressions
+  boardEl.offsetWidth;
+  boardEl.classList.add(className);
+  window.setTimeout(() => boardEl.classList.remove(className), ms);
+}
+
 function addTempClass(coords, className, ms) {
   for (const c of coords) {
     const el = cellEls[c.y]?.[c.x];
@@ -626,6 +635,8 @@ function onPointerUp(e) {
   }
 
   if (!can) {
+    vibrate(12);
+    pulseBoard("invalid-drop", 240);
     clearGhost();
     return;
   }
@@ -660,6 +671,7 @@ function onPointerUp(e) {
   setScore(score + delta);
   renderBoard();
   clearGhost();
+  pulseBoard("place-impact", 200);
 
   // Haptics + placed animation
   if (lines > 0) vibrate([20, 30, 40]);

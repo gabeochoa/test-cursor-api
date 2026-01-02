@@ -16,6 +16,7 @@
 
   --piece-cell: 18px;
   --piece-gap: 4px;
+  --piece-slot-h: 96px;
 }
 
 * {
@@ -158,6 +159,14 @@ body {
   touch-action: none;
 }
 
+.board.place-impact {
+  animation: placeImpact 180ms ease-out both;
+}
+
+.board.invalid-drop {
+  animation: invalidDrop 220ms ease-in-out both;
+}
+
 .cell {
   border-radius: 8px;
   background: var(--cell);
@@ -192,6 +201,10 @@ body {
 
 .board.line-clear {
   animation: boardShake 320ms ease-in-out both;
+  box-shadow:
+    var(--shadow),
+    0 0 0 1px rgba(255, 255, 255, 0.14),
+    0 0 22px rgba(140, 200, 255, 0.16);
 }
 
 .cell.ghost-ok {
@@ -238,7 +251,7 @@ body {
   border-radius: 14px;
   background: rgba(0, 0, 0, 0.14);
   padding: 10px;
-  min-height: 74px;
+  height: var(--piece-slot-h);
   display: grid;
   place-items: center;
   touch-action: none;
@@ -390,6 +403,40 @@ body {
   }
 }
 
+@keyframes placeImpact {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.01);
+    filter: brightness(1.08);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes invalidDrop {
+  0% {
+    transform: translate3d(0, 0, 0);
+    filter: brightness(1);
+  }
+  30% {
+    transform: translate3d(-4px, 0, 0);
+    filter: brightness(1.08);
+  }
+  60% {
+    transform: translate3d(4px, 0, 0);
+    filter: brightness(1.08);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+    filter: brightness(1);
+  }
+}
+
 @keyframes scoreBump {
   0% {
     transform: translateY(0) scale(1);
@@ -406,9 +453,12 @@ body {
 }
 
 @media (max-width: 920px) {
+  html,
   body {
-    /* "One screen" on mobile: avoid page scrolling */
+    /* prevent pull-to-refresh / page pan while playing */
     overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
   }
 
   .main {
@@ -487,7 +537,6 @@ body {
   }
 
   .piece-slot {
-    min-height: 78px;
     padding: 8px;
   }
 
@@ -499,6 +548,7 @@ body {
     /* Make tray pieces bigger on mobile */
     --piece-cell: 18px;
     --piece-gap: 4px;
+    --piece-slot-h: 86px;
   }
 
   .drag-ghost {
