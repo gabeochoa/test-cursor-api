@@ -468,13 +468,13 @@ body {
     grid-template-columns: 1fr;
     flex: 1;
     min-height: 0;
-    margin-top: 6px;
-    gap: 8px;
+    margin-top: 8px;
+    gap: 10px;
   }
 
   .app {
     height: 100dvh;
-    padding: 8px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
   }
@@ -510,17 +510,12 @@ body {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    align-items: stretch;
+    align-items: center;
     justify-content: center;
   }
 
   .board {
-    /* Full width board on mobile, keep it square */
-    width: 100%;
-    max-width: none;
-    height: auto;
-    aspect-ratio: 1 / 1;
-    padding: 8px;
+    --board-size: min(94vw, 52dvh);
   }
 
   .hint {
@@ -528,7 +523,7 @@ body {
   }
 
   .side .panel {
-    padding: 8px;
+    padding: 10px;
     width: 100%;
   }
 
@@ -550,10 +545,10 @@ body {
   }
 
   :root {
-    /* Full-width tray: scale pieces up to fill */
-    --piece-cell: clamp(16px, 5.2vw, 24px);
+    /* Make tray pieces bigger on mobile */
+    --piece-cell: 18px;
     --piece-gap: 4px;
-    --piece-slot-h: clamp(78px, 14vw, 110px);
+    --piece-slot-h: 86px;
   }
 
   .drag-ghost {
