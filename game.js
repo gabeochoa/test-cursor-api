@@ -267,7 +267,7 @@ function triggerFlameEffect(screenTakeover = false) {
     // Remove after animation completes
     setTimeout(() => {
       flamesOverlayEl.classList.remove("screen-takeover");
-    }, 3000); // 3 seconds for screen takeover
+    }, 1500); // 1.5 seconds for screen takeover
   } else {
     // Regular flames: center on score element
     const scoreEl = document.getElementById("score");
@@ -344,6 +344,19 @@ function drawGhost(cells, ok) {
 
 function renderHand() {
   piecesEl.innerHTML = "";
+  
+  // Get CSS variables for slot dimensions
+  const rootStyles = getComputedStyle(document.documentElement);
+  const pieceCellSize = parseFloat(rootStyles.getPropertyValue('--piece-cell')) || 16;
+  const pieceGap = parseFloat(rootStyles.getPropertyValue('--piece-gap')) || 4;
+  const slotHeight = parseFloat(rootStyles.getPropertyValue('--piece-slot-h')) || 96;
+  const slotPadding = isMobileLayout() ? 16 : 20; // padding top + bottom (8px * 2 or 10px * 2)
+  
+  // Calculate available height for pieces (slot height minus padding)
+  const availableHeight = slotHeight - slotPadding;
+  // Estimate available width (slots are typically around 120px wide, minus padding)
+  const availableWidth = (isMobileLayout() ? 100 : 120) - (isMobileLayout() ? 16 : 20);
+  
   for (let i = 0; i < PIECES_PER_ROUND; i++) {
     const slot = document.createElement("div");
     slot.className = "piece-slot";
@@ -358,12 +371,28 @@ function renderHand() {
     }
 
     const b = bounds(piece.shape);
+    
+    // Calculate the actual dimensions needed for this piece
+    const pieceHeight = b.h * pieceCellSize + Math.max(0, b.h - 1) * pieceGap;
+    const pieceWidth = b.w * pieceCellSize + Math.max(0, b.w - 1) * pieceGap;
+    
+    // Calculate scale factor if piece is too tall or too wide
+    const heightScale = pieceHeight > availableHeight ? availableHeight / pieceHeight : 1;
+    const widthScale = pieceWidth > availableWidth ? availableWidth / pieceWidth : 1;
+    const scale = Math.min(heightScale, widthScale, 1); // Don't scale up, only down
+    
     const grid = document.createElement("div");
     grid.className = "piece";
     grid.style.gridTemplateColumns = `repeat(${b.w}, var(--piece-cell, 18px))`;
     grid.style.gridTemplateRows = `repeat(${b.h}, var(--piece-cell, 18px))`;
     grid.style.setProperty("--fill", piece.color);
     grid.dataset.pieceId = piece.id;
+    
+    // Apply scale if needed to fit within slot
+    if (scale < 1) {
+      grid.style.transform = `scale(${scale})`;
+      grid.style.transformOrigin = 'center';
+    }
 
     // quick lookup
     const on = new Set(piece.shape.map((c) => `${c.x},${c.y}`));
@@ -701,8 +730,20 @@ function boardCellFromPointer(clientX, clientY) {
   const clampedRelX = Math.max(0, Math.min(innerW - 0.001, relX));
   const clampedRelY = Math.max(0, Math.min(innerH - 0.001, relY));
 
+  // Bias towards top row when near the top edge (makes it easier to place at top)
+  // Top 25% of board area biases towards row 0
+  const topBiasZone = innerH * 0.25;
+  let y;
+  if (clampedRelY < topBiasZone) {
+    // When in top zone, bias towards row 0
+    // Use a threshold that's easier to hit - about 40% of first cell height
+    const threshold = cellH * 0.4;
+    y = clampedRelY < threshold ? 0 : Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(clampedRelY / cellH)));
+  } else {
+    y = Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(clampedRelY / cellH)));
+  }
+
   const x = Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(clampedRelX / cellW)));
-  const y = Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(clampedRelY / cellH)));
   return { x, y };
 }
 
@@ -780,12 +821,13 @@ function clampToViewport(clientX, clientY, margin = 18) {
 }
 
 function scaledClientPoint(e, draggingState) {
-  const mult = draggingState?.moveScale || 1;
+  const multX = draggingState?.moveScaleX || 1;
+  const multY = draggingState?.moveScaleY || draggingState?.moveScale || 1;
   const dx = e.clientX - draggingState.startClientX;
   const dy = e.clientY - draggingState.startClientY;
   const p = {
-    x: draggingState.startClientX + dx * mult,
-    y: draggingState.startClientY + dy * mult,
+    x: draggingState.startClientX + dx * multX,
+    y: draggingState.startClientY + dy * multY,
   };
   return clampToViewport(p.x, p.y);
 }
@@ -815,8 +857,10 @@ function onPointerDownPiece(e) {
     dragEl,
     startClientX: e.clientX,
     startClientY: e.clientY,
-    // Increased sensitivity for better dragging responsiveness
-    moveScale: isMobileLayout() ? 1.8 : 1.3,
+    // X axis: moderate scaling (less than Y but more responsive than before)
+    moveScaleX: isMobileLayout() ? 1.5 : 1.2,
+    // Y axis: increased sensitivity so you don't have to drag as far to reach top
+    moveScaleY: isMobileLayout() ? 2.0 : 1.6,
   };
   document.addEventListener("pointermove", onPointerMove, { passive: false });
   document.addEventListener("pointerup", onPointerUp, { passive: false });
@@ -829,8 +873,8 @@ function onPointerMove(e) {
   dragging.dragEl.style.left = `${p.x}px`;
   dragging.dragEl.style.top = `${p.y}px`;
 
-  // Use actual client coordinates for accurate board cell calculation
-  const g = ghostForPointer(dragging.piece, e.clientX, e.clientY);
+  // Use scaled coordinates so the drop target matches the visual position of the drag ghost
+  const g = ghostForPointer(dragging.piece, p.x, p.y);
   if (!g) {
     clearGhost();
     return;
@@ -845,8 +889,8 @@ function onPointerUp(e) {
   const handIdx = dragging.pieceIdx;
   const piece = dragging.piece;
   const p = scaledClientPoint(e, dragging);
-  // Use actual client coordinates for accurate board cell calculation
-  const g = ghostForPointer(piece, e.clientX, e.clientY);
+  // Use scaled coordinates so placement matches the visual position of the drag ghost
+  const g = ghostForPointer(piece, p.x, p.y);
   const can = g && canPlace(piece, g.originX, g.originY);
 
   // Cleanup drag UI

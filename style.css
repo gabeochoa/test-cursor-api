@@ -47,32 +47,31 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 14px 16px;
+  gap: 24px;
+  flex-wrap: nowrap;
+  padding: 14px 20px;
   border: 1px solid var(--grid-border);
   background: var(--card);
   border-radius: 16px;
   box-shadow: var(--shadow);
+  overflow-x: auto;
+  min-width: 0;
 }
 
 .title {
   font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.2px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .subtitle {
-  margin-top: 4px;
   font-size: 12px;
   color: var(--muted);
-}
-
-.stats {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .stat {
@@ -83,6 +82,8 @@ body {
   border: 1px solid var(--grid-border);
   min-width: 92px;
   text-align: right;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .stat-label {
@@ -115,6 +116,8 @@ body {
   font-weight: 700;
   cursor: pointer;
   transition: transform 120ms ease, background 120ms ease;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .btn:hover {
@@ -254,6 +257,8 @@ body {
   display: grid;
   place-items: center;
   touch-action: none;
+  overflow: hidden;
+  min-height: var(--piece-slot-h);
 }
 
 .piece-slot.empty {
@@ -271,12 +276,13 @@ body {
   height: var(--piece-cell);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .pcell.on {
-  background: var(--fill, rgba(180, 180, 255, 0.8));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  background: var(--fill, rgba(180, 180, 255, 0.65));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  border-radius: 5px;
 }
 
 .panel-help {
@@ -666,6 +672,11 @@ body {
   .topbar {
     padding: 8px 10px;
     border-radius: 14px;
+    gap: 6px;
+  }
+
+  .title {
+    font-size: 16px;
   }
 
   .subtitle {
