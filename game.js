@@ -1356,22 +1356,93 @@ function wireEvents() {
   });
 }
 
+function calculateBoardDensity(testBoard) {
+  let filledCells = 0;
+  let totalClusters = 0;
+  let visited = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(false));
+
+  // Count filled cells and find clusters
+  for (let y = 0; y < GRID_SIZE; y++) {
+    for (let x = 0; x < GRID_SIZE; x++) {
+      if (testBoard[y][x]) {
+        filledCells++;
+
+        // If not visited, start a new cluster
+        if (!visited[y][x]) {
+          totalClusters++;
+          // Flood fill to mark cluster
+          const stack = [{x, y}];
+          while (stack.length > 0) {
+            const cell = stack.pop();
+            if (cell.x >= 0 && cell.x < GRID_SIZE && cell.y >= 0 && cell.y < GRID_SIZE &&
+                testBoard[cell.y][cell.x] && !visited[cell.y][cell.x]) {
+              visited[cell.y][cell.x] = true;
+              stack.push({x: cell.x + 1, y: cell.y});
+              stack.push({x: cell.x - 1, y: cell.y});
+              stack.push({x: cell.x, y: cell.y + 1});
+              stack.push({x: cell.x, y: cell.y - 1});
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const density = filledCells / (GRID_SIZE * GRID_SIZE);
+  const avgClusterSize = totalClusters > 0 ? filledCells / totalClusters : 0;
+
+  // Calculate clustering bonus - reward fewer, larger clusters
+  const clusteringBonus = totalClusters === 0 ? 0 : Math.min(1, avgClusterSize / 10);
+
+  return {
+    filledCells,
+    density,
+    totalClusters,
+    avgClusterSize,
+    clusteringBonus,
+    score: density * 10 + clusteringBonus * 5  // Combined density + clustering score
+  };
+}
+
+function ratePlacementForDensity(piece, originX, originY) {
+  // Create a test board with the piece placed
+  const testBoard = board.map(row => [...row]);
+  for (const c of piece.shape) {
+    const x = originX + c.x;
+    const y = originY + c.y;
+    testBoard[y][x] = piece.color;
+  }
+
+  const densityMetrics = calculateBoardDensity(testBoard);
+
+  // Also get the traditional placement rating
+  const placedCoords = piece.shape.map(c => ({ x: originX + c.x, y: originY + c.y }));
+  const traditionalRating = ratePlacement(placedCoords);
+
+  // Combine density score with traditional rating
+  // Weight density more heavily for survival
+  const combinedScore = densityMetrics.score * 3 + traditionalRating.score;
+
+  return {
+    densityMetrics,
+    traditionalRating,
+    combinedScore,
+    level: traditionalRating.level, // Keep the descriptive level
+    score: combinedScore
+  };
+}
+
 function findBestPlacement(piece) {
   const b = piece.bounds || bounds(piece.shape);
   let bestPlacement = null;
   let bestRating = { score: -1 };
-  let validPlacements = 0;
 
   // Try all possible positions for this piece
   for (let y = 0; y <= GRID_SIZE - b.h; y++) {
     for (let x = 0; x <= GRID_SIZE - b.w; x++) {
       if (canPlace(piece, x, y)) {
-        validPlacements++;
-        // Calculate placed coordinates for rating
-        const placedCoords = piece.shape.map(c => ({ x: x + c.x, y: y + c.y }));
-
-        // Rate this placement
-        const rating = ratePlacement(placedCoords);
+        // Rate this placement using density-aware scoring
+        const rating = ratePlacementForDensity(piece, x, y);
 
         // Keep track of the best placement
         if (rating.score > bestRating.score) {
@@ -1483,7 +1554,8 @@ function aiMakeMove() {
     current.rating.score > best.rating.score ? current : best
   );
 
-  console.log(`🤖 AI dragging piece ${bestPlacement.pieceIdx} to (${bestPlacement.originX}, ${bestPlacement.originY}) - Rating: ${bestPlacement.rating.level} (${bestPlacement.rating.score})`);
+  const density = bestPlacement.rating.densityMetrics;
+  console.log(`🤖 AI dragging piece ${bestPlacement.pieceIdx} to (${bestPlacement.originX}, ${bestPlacement.originY}) - Rating: ${bestPlacement.rating.level} (${bestPlacement.rating.score.toFixed(1)}) | Density: ${(density.density * 100).toFixed(1)}% (${density.totalClusters} clusters, avg size: ${density.avgClusterSize.toFixed(1)})`);
 
   // Simulate the drag instead of direct placement
   simulateAIDrag(bestPlacement.pieceIdx, bestPlacement.originX, bestPlacement.originY);
