@@ -1331,11 +1331,13 @@ function findBestPlacement(piece) {
   const b = piece.bounds || bounds(piece.shape);
   let bestPlacement = null;
   let bestRating = { score: -1 };
+  let validPlacements = 0;
 
   // Try all possible positions for this piece
   for (let y = 0; y <= GRID_SIZE - b.h; y++) {
     for (let x = 0; x <= GRID_SIZE - b.w; x++) {
       if (canPlace(piece, x, y)) {
+        validPlacements++;
         // Calculate placed coordinates for rating
         const placedCoords = piece.shape.map(c => ({ x: x + c.x, y: y + c.y }));
 
@@ -1394,6 +1396,9 @@ function aiMakeMove() {
       y: bestPlacement.originY + c.y
     }));
 
+    // Base points: blocks placed
+    let delta = bestPlacement.piece.size;
+
     const perfect = isPerfectPlacement(placedCoords);
     const placementRating = bestPlacement.rating;
     const cleared = computeFullLines();
@@ -1401,10 +1406,12 @@ function aiMakeMove() {
 
     if (lines > 0) {
       combo += 1;
-      let delta = Math.round(
+      // Lines are worth more; combo multiplies gently
+      delta += Math.round(
         (lines * 100 + cleared.cells * 2) * (1 + Math.min(combo - 1, 6) * 0.15)
       );
 
+      // Extra bonus for clearing multiple lines at once (2+).
       if (lines > 1) {
         delta += (lines - 1) * 220 + lines * lines * 35;
 
@@ -1418,7 +1425,7 @@ function aiMakeMove() {
       combo = 0;
     }
 
-    setScore(score + bestPlacement.piece.size + (delta || 0));
+    setScore(score + delta);
     renderBoard();
 
     // Apply animations based on placement rating
@@ -1463,6 +1470,12 @@ function startAI() {
 
   console.log(`🤖 AI mode starting with ${aiPlacementDelay}ms delay between moves`);
   aiIntervalId = setInterval(aiMakeMove, aiPlacementDelay);
+
+  // Also try to make an immediate move if possible
+  setTimeout(() => {
+    console.log('🤖 AI: Attempting immediate first move');
+    aiMakeMove();
+  }, 100);
 }
 
 function stopAI() {
