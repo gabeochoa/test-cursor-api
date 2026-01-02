@@ -235,8 +235,8 @@ function renderHand() {
     const b = bounds(piece.shape);
     const grid = document.createElement("div");
     grid.className = "piece";
-    grid.style.gridTemplateColumns = `repeat(${b.w}, 18px)`;
-    grid.style.gridTemplateRows = `repeat(${b.h}, 18px)`;
+    grid.style.gridTemplateColumns = `repeat(${b.w}, var(--piece-cell, 18px))`;
+    grid.style.gridTemplateRows = `repeat(${b.h}, var(--piece-cell, 18px))`;
     grid.style.setProperty("--fill", piece.color);
     grid.dataset.pieceId = piece.id;
 
@@ -439,8 +439,9 @@ function makeDragGhostEl(piece) {
   const b = bounds(piece.shape);
   const el = document.createElement("div");
   el.className = "drag-ghost piece";
-  el.style.gridTemplateColumns = `repeat(${b.w}, 22px)`;
-  el.style.gridTemplateRows = `repeat(${b.h}, 22px)`;
+  el.style.setProperty("--piece-cell", "22px");
+  el.style.gridTemplateColumns = `repeat(${b.w}, var(--piece-cell))`;
+  el.style.gridTemplateRows = `repeat(${b.h}, var(--piece-cell))`;
   el.style.setProperty("--fill", piece.color);
 
   const on = new Set(piece.shape.map((c) => `${c.x},${c.y}`));
@@ -448,8 +449,6 @@ function makeDragGhostEl(piece) {
     for (let x = 0; x < b.w; x++) {
       const pcell = document.createElement("div");
       pcell.className = "pcell" + (on.has(`${x},${y}`) ? " on" : "");
-      pcell.style.width = "22px";
-      pcell.style.height = "22px";
       if (on.has(`${x},${y}`)) pcell.style.setProperty("--fill", piece.color);
       el.appendChild(pcell);
     }

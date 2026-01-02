@@ -13,6 +13,9 @@
 
   --board-size: min(78vw, 520px);
   --board-gap: 3px;
+
+  --piece-cell: 18px;
+  --piece-gap: 4px;
 }
 
 * {
@@ -217,13 +220,13 @@ body {
 
 .piece {
   display: grid;
-  gap: 4px;
+  gap: var(--piece-gap);
   user-select: none;
 }
 
 .pcell {
-  width: 18px;
-  height: 18px;
+  width: var(--piece-cell);
+  height: var(--piece-cell);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.10);
@@ -297,11 +300,91 @@ body {
 }
 
 @media (max-width: 920px) {
+  body {
+    /* "One screen" on mobile: avoid page scrolling */
+    overflow: hidden;
+  }
+
   .main {
+    /* Make layout fill viewport height without scrolling */
+    display: flex;
+    flex-direction: column;
     grid-template-columns: 1fr;
+    flex: 1;
+    min-height: 0;
+    margin-top: 10px;
+  }
+
+  .app {
+    height: 100dvh;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .topbar {
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  .subtitle {
+    display: none;
+  }
+
+  .stat {
+    padding: 6px 8px;
+    min-width: 74px;
+  }
+
+  .stat-value {
+    font-size: 16px;
+  }
+
+  .btn {
+    padding: 8px 10px;
+  }
+
+  .board-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
   }
 
   .board {
-    --board-size: min(92vw, 520px);
+    --board-size: min(94vw, 52dvh);
+  }
+
+  .hint {
+    display: none;
+  }
+
+  .side .panel {
+    padding: 10px;
+  }
+
+  .panel-title {
+    margin-bottom: 10px;
+  }
+
+  .pieces {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .piece-slot {
+    min-height: 58px;
+    padding: 6px;
+  }
+
+  .panel-help {
+    display: none;
+  }
+
+  :root {
+    --piece-cell: 14px;
+    --piece-gap: 3px;
   }
 }
