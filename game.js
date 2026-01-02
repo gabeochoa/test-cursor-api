@@ -815,8 +815,8 @@ function onPointerDownPiece(e) {
     dragEl,
     startClientX: e.clientX,
     startClientY: e.clientY,
-    // On mobile: a little assist, but not too sensitive.
-    moveScale: isMobileLayout() ? 1.45 : 1,
+    // Increased sensitivity for better dragging responsiveness
+    moveScale: isMobileLayout() ? 1.8 : 1.3,
   };
   document.addEventListener("pointermove", onPointerMove, { passive: false });
   document.addEventListener("pointerup", onPointerUp, { passive: false });
