@@ -139,8 +139,8 @@ body {
   border: 1px solid var(--grid-border);
   box-shadow: var(--shadow);
   display: grid;
-  grid-template-columns: repeat(10, 1fr);
-  grid-template-rows: repeat(10, 1fr);
+  grid-template-columns: repeat(var(--grid-size, 10), 1fr);
+  grid-template-rows: repeat(var(--grid-size, 10), 1fr);
   gap: var(--board-gap);
   touch-action: none;
 }

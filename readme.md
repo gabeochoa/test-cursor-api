@@ -14,7 +14,7 @@ Then visit `http://localhost:8000`.
 
 ## How to play
 
-- **Drag** one of the 3 pieces onto the 10×10 board.
+- **Drag** one of the 3 pieces onto the 7×7 board.
 - If the placement is valid, the piece locks in.
 - **Full rows and/or columns clear** for extra points.
 - When you can’t place any remaining piece, it’s **game over**.
