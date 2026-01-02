@@ -12,6 +12,32 @@ python3 -m http.server 8000
 
 Then visit `http://localhost:8000`.
 
+## Open it on your phone (same Wi‑Fi)
+
+Yes—use your computer’s **local IP address**.
+
+1) Start the server bound to all interfaces:
+
+```bash
+python3 -m http.server 8000 --bind 0.0.0.0
+```
+
+2) Find your computer’s local IP (LAN):
+
+```bash
+hostname -I
+```
+
+3) On your phone (on the same Wi‑Fi), open:
+
+`http://<YOUR_LAN_IP>:8000`
+
+Example: `http://192.168.1.23:8000`
+
+If it doesn’t load:
+- Make sure your phone and computer are on the **same network**.
+- Allow inbound connections to port **8000** in any firewall you’re running.
+
 ## How to play
 
 - **Drag** one of the 3 pieces onto the 7×7 board.
