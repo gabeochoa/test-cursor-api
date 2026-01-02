@@ -532,14 +532,28 @@ function isMobileLayout() {
   return window.matchMedia && window.matchMedia("(max-width: 920px)").matches;
 }
 
+function clamp(n, lo, hi) {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function clampToViewport(clientX, clientY, margin = 18) {
+  const w = window.innerWidth || 0;
+  const h = window.innerHeight || 0;
+  return {
+    x: clamp(clientX, margin, Math.max(margin, w - margin)),
+    y: clamp(clientY, margin, Math.max(margin, h - margin)),
+  };
+}
+
 function scaledClientPoint(e, draggingState) {
   const mult = draggingState?.moveScale || 1;
   const dx = e.clientX - draggingState.startClientX;
   const dy = e.clientY - draggingState.startClientY;
-  return {
+  const p = {
     x: draggingState.startClientX + dx * mult,
     y: draggingState.startClientY + dy * mult,
   };
+  return clampToViewport(p.x, p.y);
 }
 
 function onPointerDownPiece(e) {
@@ -567,7 +581,8 @@ function onPointerDownPiece(e) {
     dragEl,
     startClientX: e.clientX,
     startClientY: e.clientY,
-    moveScale: isMobileLayout() ? 1.8 : 1,
+    // On mobile: a little assist, but not too sensitive.
+    moveScale: isMobileLayout() ? 1.45 : 1,
   };
   document.addEventListener("pointermove", onPointerMove, { passive: false });
   document.addEventListener("pointerup", onPointerUp, { passive: false });
