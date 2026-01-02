@@ -12,6 +12,7 @@ const newGameBtn = document.getElementById("newGameBtn");
 const playAgainBtn = document.getElementById("playAgainBtn");
 const modalEl = document.getElementById("gameOverModal");
 const dragLayerEl = document.getElementById("dragLayer");
+const flamesOverlayEl = document.getElementById("flamesOverlay");
 
 /** @type {(string|null)[][]} per-cell fill color */
 let board = [];
@@ -200,20 +201,79 @@ function makePiece() {
 function setScore(next) {
   const prev = score;
   score = next;
-  scoreEl.textContent = String(score);
-  if (score > prev) {
-    // restart animation
-    scoreEl.classList.remove("bump");
-    // force reflow so the animation retriggers
-    // eslint-disable-next-line no-unused-expressions
-    scoreEl.offsetWidth;
-    scoreEl.classList.add("bump");
+
+  // Check for flame effects based on score increase
+  if (prev > 0) {
+    const ratio = score / prev;
+    if (ratio >= 3) {
+      // Triple score or more - screen takeover flames
+      triggerFlameEffect(true);
+    } else if (ratio >= 2) {
+      // Double score - regular flames
+      triggerFlameEffect(false);
+    }
   }
+
+  if (score > prev) {
+    // Animate score counting up
+    const diff = score - prev;
+    let increment;
+
+    if (diff >= 1000) {
+      increment = 10;
+    } else if (diff >= 100) {
+      increment = 5;
+    } else {
+      increment = 1;
+    }
+
+    let currentScore = prev;
+    const intervalId = setInterval(() => {
+      currentScore += increment;
+      if (currentScore >= score) {
+        currentScore = score;
+        clearInterval(intervalId);
+      }
+      scoreEl.textContent = String(currentScore);
+
+      // Add bump animation on each increment
+      scoreEl.classList.remove("bump");
+      // eslint-disable-next-line no-unused-expressions
+      scoreEl.offsetWidth;
+      scoreEl.classList.add("bump");
+    }, 50);
+  } else {
+    scoreEl.textContent = String(score);
+  }
+
   if (score > bestScore) {
     bestScore = score;
     localStorage.setItem(BEST_KEY, String(bestScore));
   }
   bestScoreEl.textContent = String(bestScore);
+}
+
+function triggerFlameEffect(screenTakeover = false) {
+  // Clear any existing flame effects
+  flamesOverlayEl.classList.remove("active", "screen-takeover");
+
+  // Force reflow to restart animation
+  // eslint-disable-next-line no-unused-expressions
+  flamesOverlayEl.offsetWidth;
+
+  if (screenTakeover) {
+    flamesOverlayEl.classList.add("screen-takeover");
+    // Remove after animation completes
+    setTimeout(() => {
+      flamesOverlayEl.classList.remove("screen-takeover");
+    }, 3000); // 3 seconds for screen takeover
+  } else {
+    flamesOverlayEl.classList.add("active");
+    // Remove after animation completes
+    setTimeout(() => {
+      flamesOverlayEl.classList.remove("active");
+    }, 1500); // 1.5 seconds for regular flames
+  }
 }
 
 function showGameOver(show) {
@@ -391,10 +451,102 @@ function anyMovesAvailable() {
   return false;
 }
 
+// Generate all permutations of an array
+function permutations(arr) {
+  if (arr.length <= 1) return [arr];
+  const result = [];
+  for (let i = 0; i < arr.length; i++) {
+    const remaining = arr.slice(0, i).concat(arr.slice(i + 1));
+    const perms = permutations(remaining);
+    for (const perm of perms) {
+      result.push([arr[i], ...perm]);
+    }
+  }
+  return result;
+}
+
+// Check if a set of pieces can be placed in some order on the current board
+function isSolvablePieceSet(pieces) {
+  // Filter out null pieces
+  const validPieces = pieces.filter(piece => piece !== null);
+  if (validPieces.length === 0) return true;
+
+  // Generate all permutations of the pieces
+  const piecePerms = permutations(validPieces);
+
+  // Test each permutation
+  for (const perm of piecePerms) {
+    // Create a copy of the board to simulate placement
+    const testBoard = board.map(row => [...row]);
+    let allPlaced = true;
+
+    // Try to place each piece in this order
+    for (const piece of perm) {
+      let placed = false;
+
+      // Try every possible position
+      for (let y = 0; y < GRID_SIZE && !placed; y++) {
+        for (let x = 0; x < GRID_SIZE && !placed; x++) {
+          if (canPlaceOnBoard(piece, x, y, testBoard)) {
+            // Place the piece on the test board
+            placePieceOnBoard(piece, x, y, testBoard);
+            placed = true;
+          }
+        }
+      }
+
+      if (!placed) {
+        allPlaced = false;
+        break;
+      }
+    }
+
+    if (allPlaced) {
+      return true; // Found a valid order
+    }
+  }
+
+  return false; // No valid order found
+}
+
+// Helper function to check placement on a specific board state
+function canPlaceOnBoard(piece, originX, originY, testBoard) {
+  for (const c of piece.shape) {
+    const x = originX + c.x;
+    const y = originY + c.y;
+    if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) return false;
+    if (testBoard[y][x] !== null) return false;
+  }
+  return true;
+}
+
+// Helper function to place a piece on a specific board state
+function placePieceOnBoard(piece, originX, originY, testBoard) {
+  for (const c of piece.shape) {
+    const x = originX + c.x;
+    const y = originY + c.y;
+    testBoard[y][x] = piece.color;
+  }
+}
+
 function maybeDealNewHand() {
   const remaining = hand.filter(Boolean).length;
   if (remaining === 0) {
-    hand = Array.from({ length: PIECES_PER_ROUND }, () => makePiece());
+    // Keep generating new piece sets until we find one that's solvable
+    let attempts = 0;
+    const maxAttempts = 100; // Prevent infinite loops
+
+    do {
+      hand = Array.from({ length: PIECES_PER_ROUND }, () => makePiece());
+      attempts++;
+    } while (!isSolvablePieceSet(hand) && attempts < maxAttempts);
+
+    // If we still couldn't find a solvable set after max attempts,
+    // just use whatever we have (fallback to prevent game freezing)
+    if (attempts >= maxAttempts) {
+      console.warn("Could not generate solvable piece set after", maxAttempts, "attempts");
+    }
+
     renderHand();
   }
 }
@@ -473,14 +625,7 @@ function isPerfectPlacement(placedCoords) {
 
 function boardCellFromPointer(clientX, clientY) {
   const rect = boardEl.getBoundingClientRect();
-  if (
-    clientX < rect.left ||
-    clientX > rect.right ||
-    clientY < rect.top ||
-    clientY > rect.bottom
-  )
-    return null;
-
+  
   const styles = getComputedStyle(boardEl);
   const padL = parseFloat(styles.paddingLeft) || 0;
   const padR = parseFloat(styles.paddingRight) || 0;
@@ -490,8 +635,19 @@ function boardCellFromPointer(clientX, clientY) {
   const innerW = Math.max(1, rect.width - padL - padR);
   const innerH = Math.max(1, rect.height - padT - padB);
 
+  // Calculate relative position
   const relX = clientX - rect.left - padL;
   const relY = clientY - rect.top - padT;
+
+  // Only return null if pointer is far outside bounds (allows slight overflow for edge cases)
+  const margin = 20;
+  if (
+    relX < -margin ||
+    relX > innerW + margin ||
+    relY < -margin ||
+    relY > innerH + margin
+  )
+    return null;
 
   const cellW = innerW / GRID_SIZE;
   const cellH = innerH / GRID_SIZE;
@@ -508,37 +664,12 @@ function nearestValidOrigin(piece, desiredOriginX, desiredOriginY) {
   const maxX = GRID_SIZE - b.w;
   const maxY = GRID_SIZE - b.h;
 
-  const startX = Math.max(minX, Math.min(maxX, desiredOriginX));
-  const startY = Math.max(minY, Math.min(maxY, desiredOriginY));
+  const clampedX = Math.max(minX, Math.min(maxX, desiredOriginX));
+  const clampedY = Math.max(minY, Math.min(maxY, desiredOriginY));
 
-  if (canPlace(piece, startX, startY)) return { x: startX, y: startY, ok: true };
+  if (canPlace(piece, clampedX, clampedY)) return { x: clampedX, y: clampedY, ok: true };
 
-  // BFS (manhattan) to find closest valid origin.
-  const key = (x, y) => `${x},${y}`;
-  const q = [{ x: startX, y: startY }];
-  const seen = new Set([key(startX, startY)]);
-  const dirs = [
-    { dx: 1, dy: 0 },
-    { dx: -1, dy: 0 },
-    { dx: 0, dy: 1 },
-    { dx: 0, dy: -1 },
-  ];
-
-  while (q.length) {
-    const cur = q.shift();
-    for (const d of dirs) {
-      const nx = cur.x + d.dx;
-      const ny = cur.y + d.dy;
-      if (nx < minX || nx > maxX || ny < minY || ny > maxY) continue;
-      const k = key(nx, ny);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      if (canPlace(piece, nx, ny)) return { x: nx, y: ny, ok: true };
-      q.push({ x: nx, y: ny });
-    }
-  }
-
-  return { x: startX, y: startY, ok: false };
+  return { x: clampedX, y: clampedY, ok: false };
 }
 
 function ghostForPointer(piece, clientX, clientY) {

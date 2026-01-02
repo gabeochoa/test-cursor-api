@@ -1,0 +1,25 @@
+{
+  "name": "test-cursor-api",
+  "version": "1.0.0",
+  "description": "A lightweight, dependency-free Block Blast-style puzzle game built with **vanilla HTML/CSS/JS**.",
+  "main": "game.js",
+  "scripts": {
+    "start": "live-server --host=0.0.0.0 --port=3000 --open=/",
+    "dev": "live-server --host=0.0.0.0 --port=3000 --open=/",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gabeochoa/test-cursor-api.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/gabeochoa/test-cursor-api/issues"
+  },
+  "homepage": "https://github.com/gabeochoa/test-cursor-api#readme",
+  "devDependencies": {
+    "live-server": "^1.2.2"
+  }
+}

@@ -4,7 +4,25 @@ A lightweight, dependency-free Block Blast-style puzzle game built with **vanill
 
 ## How to run
 
-Open `index.html` directly, or run a tiny local server (recommended):
+### Option 1: Live reloading (recommended for development)
+
+This method provides automatic browser refresh when you save changes:
+
+```bash
+# Install dependencies (first time only)
+npm install
+
+# Start the development server with live reloading
+npm start
+```
+
+Then visit `http://localhost:3000`.
+
+The server is accessible from other devices on your network at `http://<YOUR_IP>:3000`.
+
+### Option 2: Simple local server
+
+Open `index.html` directly, or run a tiny local server:
 
 ```bash
 python3 -m http.server 8000
@@ -12,15 +30,17 @@ python3 -m http.server 8000
 
 Then visit `http://localhost:8000`.
 
-## Open it on your phone (same Wi‑Fi)
+## Test on mobile devices
 
-Yes—use your computer’s **local IP address**.
+Both server options automatically bind to all network interfaces, so you can test on mobile devices:
 
-1) Start the server bound to all interfaces:
+1) Find your computer's local IP address:
 
 ```bash
 python3 -m http.server 8000 --bind 0.0.0.0
 ```
+# macOS:
+ipconfig getifaddr en0
 
 2) Find your computer’s local IP (LAN):
 
@@ -28,22 +48,15 @@ python3 -m http.server 8000 --bind 0.0.0.0
 # Linux:
 hostname -I
 
-# macOS (Wi‑Fi is usually en0):
-ipconfig getifaddr en0
-
-# macOS alternative:
-ifconfig | grep "inet " | grep -v 127.0.0.1
+# Windows (Command Prompt):
+ipconfig | findstr /R /C:"IPv4 Address"
 ```
 
-3) On your phone (on the same Wi‑Fi), open:
+2) On your phone/tablet (same Wi-Fi network), visit: `http://<YOUR_IP>:3000` (for npm) or `http://<YOUR_IP>:8000` (for Python)
 
-`http://<YOUR_LAN_IP>:8000`
+Example: `http://192.168.1.23:3000`
 
-Example: `http://192.168.1.23:8000`
-
-If it doesn’t load:
-- Make sure your phone and computer are on the **same network**.
-- Allow inbound connections to port **8000** in any firewall you’re running.
+**Note:** Make sure your firewall allows connections to the respective port (3000 for npm, 8000 for Python).
 
 ## How to play
 
