@@ -81,8 +81,11 @@ While playing, press `Ctrl+A` to toggle AI mode on/off.
 
 ### How AI Works
 - The AI evaluates all possible placements for each piece
-- It chooses the highest-rated placement based on the game's scoring system
-- Pieces are placed automatically every ~800ms
+- **Density-aware strategy**: Prioritizes placements that create denser, more connected filled areas
+- Analyzes board clustering to maximize survival potential
+- Chooses placements that result in fewer, larger filled clusters
+- Pieces are placed automatically every ~1000ms with visible drag animations
+- Console shows detailed metrics: density percentage, cluster count, and cluster sizes
 - The AI will play until the game ends or you toggle it off
 
 **Visual Indicator:** The title shows 🤖 when AI mode is active.
