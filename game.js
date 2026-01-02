@@ -31,6 +31,10 @@ let isAnimating = false;
 /** @type {HTMLElement[][]} */
 let cellEls = [];
 
+/** Animation/timer state */
+let scoreIntervalId = null; // Track score animation interval
+let flameTimeoutId = null; // Track flame effect timeout
+
 function randInt(maxExclusive) {
   return Math.floor(Math.random() * maxExclusive);
 }
@@ -202,6 +206,12 @@ function setScore(next) {
   const prev = score;
   score = next;
   
+  // Clear any existing score animation interval to prevent memory leaks
+  if (scoreIntervalId !== null) {
+    clearInterval(scoreIntervalId);
+    scoreIntervalId = null;
+  }
+  
   // Flame effects are now triggered based on number of lines cleared, not score ratio
 
   if (score > prev) {
@@ -218,11 +228,12 @@ function setScore(next) {
     }
 
     let currentScore = prev;
-    const intervalId = setInterval(() => {
+    scoreIntervalId = setInterval(() => {
       currentScore += increment;
       if (currentScore >= score) {
         currentScore = score;
-        clearInterval(intervalId);
+        clearInterval(scoreIntervalId);
+        scoreIntervalId = null;
       }
       scoreEl.textContent = String(currentScore);
 
@@ -244,6 +255,12 @@ function setScore(next) {
 }
 
 function triggerFlameEffect(screenTakeover = false) {
+  // Clear any existing flame effect timeout to prevent memory leaks
+  if (flameTimeoutId !== null) {
+    clearTimeout(flameTimeoutId);
+    flameTimeoutId = null;
+  }
+  
   // Clear any existing flame effects
   flamesOverlayEl.classList.remove("active", "screen-takeover");
 
@@ -255,12 +272,12 @@ function triggerFlameEffect(screenTakeover = false) {
     // Screen takeover: cover entire viewport
     flamesOverlayEl.classList.add("screen-takeover");
     // Remove after animation completes
-    setTimeout(() => {
+    flameTimeoutId = setTimeout(() => {
       flamesOverlayEl.classList.remove("screen-takeover");
+      flameTimeoutId = null;
     }, 1500); // 1.5 seconds for screen takeover
   } else {
-    // Regular flames: center on score element
-    const scoreEl = document.getElementById("score");
+    // Regular flames: center on score element (use existing global variable)
     const scoreRect = scoreEl.getBoundingClientRect();
     const scoreParentRect = scoreEl.closest(".stat").getBoundingClientRect();
     
@@ -270,8 +287,9 @@ function triggerFlameEffect(screenTakeover = false) {
     
     flamesOverlayEl.classList.add("active");
     // Remove after animation completes
-    setTimeout(() => {
+    flameTimeoutId = setTimeout(() => {
       flamesOverlayEl.classList.remove("active");
+      flameTimeoutId = null;
     }, 1500); // 1.5 seconds for regular flames
   }
 }
@@ -417,14 +435,22 @@ function placePiece(piece, originX, originY) {
     const y = originY + c.y;
     if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) {
       console.error("Attempted to place piece out of bounds", { originX, originY, x, y, shape: piece.shape });
-      return;
+      return false;
     }
     if (board[y][x] !== null) {
       console.error("Attempted to place piece on occupied cell", { originX, originY, x, y });
-      return;
+      return false;
     }
+  }
+  
+  // All validations passed, place the piece
+  for (const c of piece.shape) {
+    const x = originX + c.x;
+    const y = originY + c.y;
     board[y][x] = piece.color;
   }
+  
+  return true;
 }
 
 function computeFullLines() {
@@ -522,6 +548,12 @@ function isSolvablePieceSet(pieces) {
     for (const piece of perm) {
       let placed = false;
       const b = piece.bounds || bounds(piece.shape);
+      
+      // Skip pieces that are too large to fit on the board
+      if (b.w > GRID_SIZE || b.h > GRID_SIZE) {
+        allPlaced = false;
+        break;
+      }
       
       // Only check positions where the piece could actually fit
       const maxX = GRID_SIZE - b.w;
@@ -623,6 +655,16 @@ function maybeDealNewHand() {
 }
 
 function startNewGame() {
+  // Clear any running animations/timers
+  if (scoreIntervalId !== null) {
+    clearInterval(scoreIntervalId);
+    scoreIntervalId = null;
+  }
+  if (flameTimeoutId !== null) {
+    clearTimeout(flameTimeoutId);
+    flameTimeoutId = null;
+  }
+  
   board = makeEmptyBoard();
   seedBoardRandomBlocks();
   // Ensure the initial hand is solvable
@@ -808,14 +850,23 @@ function makeDragGhostEl(piece) {
   // Calculate cell size (accounting for gaps between cells)
   const cellW = (innerW - (GRID_SIZE - 1) * gap) / GRID_SIZE;
   const cellH = (innerH - (GRID_SIZE - 1) * gap) / GRID_SIZE;
-  const cellSize = Math.min(cellW, cellH);
+  const boardCellSize = Math.min(cellW, cellH);
+  
+  // Scale drag ghost to 80% of board cell size
+  const cellSize = boardCellSize * 0.8;
+  const scaledGap = gap * 0.8;
   
   const el = document.createElement("div");
   el.className = "drag-ghost piece";
   el.style.gridTemplateColumns = `repeat(${b.w}, ${cellSize}px)`;
   el.style.gridTemplateRows = `repeat(${b.h}, ${cellSize}px)`;
   el.style.setProperty("--fill", piece.color);
-  el.style.setProperty("--piece-gap", `${gap}px`);
+  el.style.setProperty("--piece-gap", `${scaledGap}px`);
+  
+  // Set the cell size CSS variable so pcell elements use the correct size
+  // This overrides the default --drag-cell value
+  el.style.setProperty("--piece-cell", `${cellSize}px`);
+  el.style.setProperty("--drag-cell", `${cellSize}px`);
 
   const on = new Set(piece.shape.map((c) => `${c.x},${c.y}`));
   for (let y = 0; y < b.h; y++) {
@@ -916,17 +967,22 @@ function onPointerUp(e) {
 
   const handIdx = dragging.pieceIdx;
   const piece = dragging.piece;
+  const dragEl = dragging.dragEl;
   
   // Use scaled coordinates for placement so it matches the visual drag element and ghost
   const p = scaledClientPoint(e, dragging);
   const g = ghostForPointer(piece, p.x, p.y);
 
-  // Cleanup drag UI first
-  dragging.dragEl.remove();
-  dragLayerEl.setAttribute("aria-hidden", "true");
-  dragging = null;
-  document.removeEventListener("pointermove", onPointerMove);
-  document.removeEventListener("pointerup", onPointerUp);
+  // Cleanup drag UI and event listeners first (before any early returns)
+  // Use try-finally to ensure cleanup happens even if errors occur
+  try {
+    dragEl.remove();
+    dragLayerEl.setAttribute("aria-hidden", "true");
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUp);
+  } finally {
+    dragging = null;
+  }
 
   // Validate placement
   if (!g) {
@@ -941,9 +997,19 @@ function onPointerUp(e) {
     return;
   }
 
-  // Place the piece
+  // Place the piece - only remove from hand if placement succeeds
   const placedCoords = piece.shape.map((c) => ({ x: g.originX + c.x, y: g.originY + c.y }));
-  placePiece(piece, g.originX, g.originY);
+  const placementSuccess = placePiece(piece, g.originX, g.originY);
+  
+  if (!placementSuccess) {
+    // Placement failed despite validation - this shouldn't happen, but handle it gracefully
+    console.error("Placement failed after validation passed");
+    vibrate(12);
+    pulseBoard("invalid-drop", 240);
+    clearGhost();
+    return;
+  }
+  
   hand[handIdx] = null;
 
   // Base points: blocks placed
