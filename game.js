@@ -35,8 +35,49 @@ let cellEls = [];
 let scoreIntervalId = null; // Track score animation interval
 let flameTimeoutId = null; // Track flame effect timeout
 
+/** AI mode state */
+let isAIMode = false;
+let aiIntervalId = null;
+let aiPlacementDelay = 800; // ms between AI placements
+
 function randInt(maxExclusive) {
   return Math.floor(Math.random() * maxExclusive);
+}
+
+function getQueryParam(name) {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get(name);
+}
+
+function initAIMode() {
+  // Check for AI mode query parameter
+  isAIMode = getQueryParam('ai') === 'true' || getQueryParam('autoplay') === 'true';
+  updateAITitle();
+  if (isAIMode) {
+    console.log('🤖 AI mode enabled - automatic gameplay activated');
+    startAI();
+  }
+}
+
+function updateAITitle() {
+  const titleEl = document.querySelector('.title');
+  if (titleEl) {
+    const baseTitle = 'Block Blast';
+    titleEl.textContent = isAIMode ? `${baseTitle} 🤖` : baseTitle;
+  }
+}
+
+function toggleAIMode() {
+  isAIMode = !isAIMode;
+  updateAITitle();
+
+  if (isAIMode) {
+    console.log('🤖 AI mode activated manually');
+    startAI();
+  } else {
+    console.log('🤖 AI mode deactivated');
+    stopAI();
+  }
 }
 
 function makeEmptyBoard() {
@@ -297,6 +338,11 @@ function triggerFlameEffect(screenTakeover = false) {
 function showGameOver(show) {
   modalEl.classList.toggle("show", show);
   modalEl.setAttribute("aria-hidden", show ? "false" : "true");
+
+  // Stop AI when game ends
+  if (show && isAIMode) {
+    stopAI();
+  }
 }
 
 function initBoardDom() {
@@ -664,7 +710,12 @@ function startNewGame() {
     clearTimeout(flameTimeoutId);
     flameTimeoutId = null;
   }
-  
+
+  // Stop AI during game reset
+  if (isAIMode) {
+    stopAI();
+  }
+
   board = makeEmptyBoard();
   seedBoardRandomBlocks();
   // Ensure the initial hand is solvable
@@ -677,6 +728,12 @@ function startNewGame() {
   boardEl.classList.remove("line-clear");
   renderBoard();
   renderHand();
+
+  // Restart AI after game setup if in AI mode
+  if (isAIMode) {
+    // Small delay to let the game render before starting AI
+    setTimeout(startAI, 500);
+  }
 }
 
 function vibrate(pattern) {
@@ -1263,13 +1320,164 @@ function wireEvents() {
   });
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && modalEl.classList.contains("show")) startNewGame();
+    if (e.key === "a" && e.ctrlKey) {
+      e.preventDefault();
+      toggleAIMode();
+    }
   });
+}
+
+function findBestPlacement(piece) {
+  const b = piece.bounds || bounds(piece.shape);
+  let bestPlacement = null;
+  let bestRating = { score: -1 };
+
+  // Try all possible positions for this piece
+  for (let y = 0; y <= GRID_SIZE - b.h; y++) {
+    for (let x = 0; x <= GRID_SIZE - b.w; x++) {
+      if (canPlace(piece, x, y)) {
+        // Calculate placed coordinates for rating
+        const placedCoords = piece.shape.map(c => ({ x: x + c.x, y: y + c.y }));
+
+        // Rate this placement
+        const rating = ratePlacement(placedCoords);
+
+        // Keep track of the best placement
+        if (rating.score > bestRating.score) {
+          bestRating = rating;
+          bestPlacement = { originX: x, originY: y, rating };
+        }
+      }
+    }
+  }
+
+  return bestPlacement;
+}
+
+function aiMakeMove() {
+  if (!isAIMode || isAnimating || modalEl.classList.contains("show")) {
+    return;
+  }
+
+  // Find the best placement for each piece in hand
+  const placements = [];
+  for (let i = 0; i < hand.length; i++) {
+    const piece = hand[i];
+    if (piece) {
+      const placement = findBestPlacement(piece);
+      if (placement) {
+        placements.push({ pieceIdx: i, piece, ...placement });
+      }
+    }
+  }
+
+  if (placements.length === 0) {
+    console.log('🤖 AI: No valid placements found - game over');
+    return;
+  }
+
+  // Choose the best placement overall
+  const bestPlacement = placements.reduce((best, current) =>
+    current.rating.score > best.rating.score ? current : best
+  );
+
+  console.log(`🤖 AI placing piece ${bestPlacement.pieceIdx} at (${bestPlacement.originX}, ${bestPlacement.originY}) - Rating: ${bestPlacement.rating.level} (${bestPlacement.rating.score})`);
+
+  // Simulate the placement
+  const success = placePiece(bestPlacement.piece, bestPlacement.originX, bestPlacement.originY);
+  if (success) {
+    hand[bestPlacement.pieceIdx] = null;
+
+    // Calculate scoring and effects (same as manual placement)
+    const placedCoords = bestPlacement.piece.shape.map(c => ({
+      x: bestPlacement.originX + c.x,
+      y: bestPlacement.originY + c.y
+    }));
+
+    const perfect = isPerfectPlacement(placedCoords);
+    const placementRating = bestPlacement.rating;
+    const cleared = computeFullLines();
+    const lines = cleared.rows + cleared.cols;
+
+    if (lines > 0) {
+      combo += 1;
+      let delta = Math.round(
+        (lines * 100 + cleared.cells * 2) * (1 + Math.min(combo - 1, 6) * 0.15)
+      );
+
+      if (lines > 1) {
+        delta += (lines - 1) * 220 + lines * lines * 35;
+
+        if (lines >= 3) {
+          triggerFlameEffect(true);
+        } else {
+          triggerFlameEffect(false);
+        }
+      }
+    } else {
+      combo = 0;
+    }
+
+    setScore(score + bestPlacement.piece.size + (delta || 0));
+    renderBoard();
+
+    // Apply animations based on placement rating
+    if (placementRating.level === "perfect") {
+      addTempClass(placedCoords, "perfect", 850);
+      addTempClass(placedCoords, "just-placed", 450);
+    } else if (placementRating.level === "great") {
+      addTempClass(placedCoords, "great-placement", 500);
+    } else if (placementRating.level === "nice") {
+      addTempClass(placedCoords, "nice-placement", 400);
+    } else if (placementRating.level === "okay") {
+      addTempClass(placedCoords, "okay-placement", 300);
+    }
+
+    // Handle line clearing
+    if (lines > 0) {
+      isAnimating = true;
+      boardEl.classList.add("line-clear");
+      addTempClass(cleared.coords, "clearing", 650);
+
+      applyClear(cleared.coords);
+
+      setTimeout(() => {
+        boardEl.classList.remove("line-clear");
+        isAnimating = false;
+        maybeDealNewHand();
+        renderHand();
+        if (!anyMovesAvailable()) showGameOver(true);
+      }, 650);
+    } else {
+      maybeDealNewHand();
+      renderHand();
+      if (!anyMovesAvailable()) showGameOver(true);
+    }
+  }
+}
+
+function startAI() {
+  if (aiIntervalId) {
+    clearInterval(aiIntervalId);
+  }
+
+  console.log(`🤖 AI mode starting with ${aiPlacementDelay}ms delay between moves`);
+  aiIntervalId = setInterval(aiMakeMove, aiPlacementDelay);
+}
+
+function stopAI() {
+  if (aiIntervalId) {
+    clearInterval(aiIntervalId);
+    aiIntervalId = null;
+    console.log('🤖 AI mode stopped');
+  }
 }
 
 function main() {
   bestScoreEl.textContent = String(bestScore);
   initBoardDom();
   wireEvents();
+  initAIMode(); // Initialize AI mode
   startNewGame();
 }
 

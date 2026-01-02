@@ -65,6 +65,28 @@ Example: `http://192.168.1.23:3000`
 - **Full rows and/or columns clear** for extra points.
 - When you can’t place any remaining piece, it’s **game over**.
 
+## AI Mode
+
+For testing and demonstration purposes, you can enable automatic gameplay:
+
+### URL Parameter
+Add `?ai=true` or `?autoplay=true` to the URL to enable AI mode on page load.
+
+**Examples:**
+- `http://localhost:8000?ai=true`
+- `http://localhost:8000?autoplay=true`
+
+### Manual Toggle
+While playing, press `Ctrl+A` to toggle AI mode on/off.
+
+### How AI Works
+- The AI evaluates all possible placements for each piece
+- It chooses the highest-rated placement based on the game's scoring system
+- Pieces are placed automatically every ~800ms
+- The AI will play until the game ends or you toggle it off
+
+**Visual Indicator:** The title shows 🤖 when AI mode is active.
+
 ## Files
 
 - `index.html`: UI shell
