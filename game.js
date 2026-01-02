@@ -262,12 +262,22 @@ function triggerFlameEffect(screenTakeover = false) {
   flamesOverlayEl.offsetWidth;
 
   if (screenTakeover) {
+    // Screen takeover: cover entire viewport
     flamesOverlayEl.classList.add("screen-takeover");
     // Remove after animation completes
     setTimeout(() => {
       flamesOverlayEl.classList.remove("screen-takeover");
     }, 3000); // 3 seconds for screen takeover
   } else {
+    // Regular flames: center on score element
+    const scoreEl = document.getElementById("score");
+    const scoreRect = scoreEl.getBoundingClientRect();
+    const scoreParentRect = scoreEl.closest(".stat").getBoundingClientRect();
+    
+    // Position overlay centered on the score stat element
+    flamesOverlayEl.style.top = `${scoreParentRect.top + scoreParentRect.height / 2 - 60}px`;
+    flamesOverlayEl.style.left = `${scoreParentRect.left + scoreParentRect.width / 2 - 60}px`;
+    
     flamesOverlayEl.classList.add("active");
     // Remove after animation completes
     setTimeout(() => {
@@ -483,10 +493,14 @@ function isSolvablePieceSet(pieces) {
     // Try to place each piece in this order
     for (const piece of perm) {
       let placed = false;
+      const b = piece.bounds || bounds(piece.shape);
+      
+      // Only check positions where the piece could actually fit
+      const maxX = GRID_SIZE - b.w;
+      const maxY = GRID_SIZE - b.h;
 
-      // Try every possible position
-      for (let y = 0; y < GRID_SIZE && !placed; y++) {
-        for (let x = 0; x < GRID_SIZE && !placed; x++) {
+      for (let y = 0; y <= maxY && !placed; y++) {
+        for (let x = 0; x <= maxX && !placed; x++) {
           if (canPlaceOnBoard(piece, x, y, testBoard)) {
             // Place the piece on the test board
             placePieceOnBoard(piece, x, y, testBoard);
@@ -529,24 +543,53 @@ function placePieceOnBoard(piece, originX, originY, testBoard) {
   }
 }
 
+// Generate a hand of pieces that is guaranteed to be solvable on the current board
+function generateSolvableHand() {
+  let attempts = 0;
+  const maxAttempts = 500; // Increased attempts for better reliability
+
+  while (attempts < maxAttempts) {
+    const newHand = Array.from({ length: PIECES_PER_ROUND }, () => makePiece());
+    if (isSolvablePieceSet(newHand)) {
+      return newHand;
+    }
+    attempts++;
+  }
+
+  // Fallback: if we can't find a solvable set, try generating smaller pieces
+  // This should rarely happen, but provides a safety net
+  console.warn("Could not generate solvable piece set after", maxAttempts, "attempts, trying smaller pieces");
+  for (let attempt = 0; attempt < 100; attempt++) {
+    // Try to generate pieces with smaller sizes (more likely to fit)
+    const newHand = [];
+    for (let i = 0; i < PIECES_PER_ROUND; i++) {
+      // Prefer smaller shapes (first 20 shapes tend to be smaller)
+      const shapeIdx = randInt(Math.min(20, SHAPES.length));
+      const shape = SHAPES[shapeIdx];
+      const size = shape.length;
+      const b = bounds(shape);
+      newHand.push({
+        id: Math.random().toString(16).slice(2),
+        shape,
+        size,
+        color: colorForSize(size),
+        bounds: b,
+      });
+    }
+    if (isSolvablePieceSet(newHand)) {
+      return newHand;
+    }
+  }
+
+  // Last resort: return random pieces (should be extremely rare)
+  console.error("Failed to generate solvable hand, using random pieces");
+  return Array.from({ length: PIECES_PER_ROUND }, () => makePiece());
+}
+
 function maybeDealNewHand() {
   const remaining = hand.filter(Boolean).length;
   if (remaining === 0) {
-    // Keep generating new piece sets until we find one that's solvable
-    let attempts = 0;
-    const maxAttempts = 100; // Prevent infinite loops
-
-    do {
-      hand = Array.from({ length: PIECES_PER_ROUND }, () => makePiece());
-      attempts++;
-    } while (!isSolvablePieceSet(hand) && attempts < maxAttempts);
-
-    // If we still couldn't find a solvable set after max attempts,
-    // just use whatever we have (fallback to prevent game freezing)
-    if (attempts >= maxAttempts) {
-      console.warn("Could not generate solvable piece set after", maxAttempts, "attempts");
-    }
-
+    hand = generateSolvableHand();
     renderHand();
   }
 }
@@ -554,7 +597,8 @@ function maybeDealNewHand() {
 function startNewGame() {
   board = makeEmptyBoard();
   seedBoardRandomBlocks();
-  hand = Array.from({ length: PIECES_PER_ROUND }, () => makePiece());
+  // Ensure the initial hand is solvable
+  hand = generateSolvableHand();
   combo = 0;
   isAnimating = false;
   setScore(0);
@@ -652,8 +696,13 @@ function boardCellFromPointer(clientX, clientY) {
   const cellW = innerW / GRID_SIZE;
   const cellH = innerH / GRID_SIZE;
 
-  const x = Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(relX / cellW)));
-  const y = Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(relY / cellH)));
+  // Clamp relative positions to valid range before calculating cell indices
+  // This prevents negative values from causing incorrect cell calculations
+  const clampedRelX = Math.max(0, Math.min(innerW - 0.001, relX));
+  const clampedRelY = Math.max(0, Math.min(innerH - 0.001, relY));
+
+  const x = Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(clampedRelX / cellW)));
+  const y = Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(clampedRelY / cellH)));
   return { x, y };
 }
 
@@ -664,11 +713,16 @@ function nearestValidOrigin(piece, desiredOriginX, desiredOriginY) {
   const maxX = GRID_SIZE - b.w;
   const maxY = GRID_SIZE - b.h;
 
+  // Clamp to valid bounds
   const clampedX = Math.max(minX, Math.min(maxX, desiredOriginX));
   const clampedY = Math.max(minY, Math.min(maxY, desiredOriginY));
 
-  if (canPlace(piece, clampedX, clampedY)) return { x: clampedX, y: clampedY, ok: true };
+  // Check if the clamped position is valid
+  if (canPlace(piece, clampedX, clampedY)) {
+    return { x: clampedX, y: clampedY, ok: true };
+  }
 
+  // If clamped position is invalid, return it anyway (ghost will show as invalid)
   return { x: clampedX, y: clampedY, ok: false };
 }
 
@@ -775,7 +829,8 @@ function onPointerMove(e) {
   dragging.dragEl.style.left = `${p.x}px`;
   dragging.dragEl.style.top = `${p.y}px`;
 
-  const g = ghostForPointer(dragging.piece, p.x, p.y);
+  // Use actual client coordinates for accurate board cell calculation
+  const g = ghostForPointer(dragging.piece, e.clientX, e.clientY);
   if (!g) {
     clearGhost();
     return;
@@ -790,7 +845,8 @@ function onPointerUp(e) {
   const handIdx = dragging.pieceIdx;
   const piece = dragging.piece;
   const p = scaledClientPoint(e, dragging);
-  const g = ghostForPointer(piece, p.x, p.y);
+  // Use actual client coordinates for accurate board cell calculation
+  const g = ghostForPointer(piece, e.clientX, e.clientY);
   const can = g && canPlace(piece, g.originX, g.originY);
 
   // Cleanup drag UI
