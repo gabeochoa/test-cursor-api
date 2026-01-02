@@ -680,9 +680,44 @@ function startNewGame() {
 }
 
 function vibrate(pattern) {
+  // Web Vibration API works on mobile browsers (iOS Safari 13+, Chrome Android, etc.)
   if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-    navigator.vibrate(pattern);
+    try {
+      navigator.vibrate(pattern);
+    } catch (e) {
+      // Silently fail if vibration is not supported or blocked
+    }
   }
+}
+
+// Enhanced haptic patterns for different game events
+function hapticPlacePiece() {
+  vibrate(15); // Quick tap for normal placement
+}
+
+function hapticPerfectPlacement() {
+  vibrate([10, 20, 10, 20, 10]); // Double-tap pattern for perfect placement
+}
+
+function hapticLineClear(lines) {
+  if (lines >= 3) {
+    // Epic pattern for 3+ lines
+    vibrate([20, 30, 20, 40, 20, 50, 30]);
+  } else if (lines === 2) {
+    // Strong pattern for 2 lines
+    vibrate([20, 30, 20, 40, 20]);
+  } else {
+    // Single line clear
+    vibrate([20, 30, 20]);
+  }
+}
+
+function hapticInvalidDrop() {
+  vibrate([10, 20, 10, 20]); // Quick double vibration for error
+}
+
+function hapticPickupPiece() {
+  vibrate(5); // Subtle tap when picking up a piece
 }
 
 function pulseBoard(className, ms) {
@@ -735,6 +770,95 @@ function isPerfectPlacement(placedCoords) {
   }
 
   return touchUp && touchDown && touchLeft && touchRight;
+}
+
+function ratePlacement(placedCoords) {
+  // Rate placement quality: "eh", "okay", "nice", "great", "perfect"
+  // Returns: { level: string, score: number }
+  const set = new Set(placedCoords.map((c) => `${c.x},${c.y}`));
+  
+  let totalTouchingSides = 0;
+  let blocksTouchingAny = 0;
+  let blocksTouchingAll = 0;
+  const totalBlocks = placedCoords.length;
+  
+  for (const c of placedCoords) {
+    let touchUp = false;
+    let touchDown = false;
+    let touchLeft = false;
+    let touchRight = false;
+    let touchingAny = false;
+    
+    // Check up
+    const upY = c.y - 1;
+    if (upY < 0) {
+      touchUp = true;
+    } else if (board[upY][c.x] !== null && !set.has(`${c.x},${upY}`)) {
+      touchUp = true;
+      touchingAny = true;
+    }
+    
+    // Check down
+    const downY = c.y + 1;
+    if (downY >= GRID_SIZE) {
+      touchDown = true;
+    } else if (board[downY][c.x] !== null && !set.has(`${c.x},${downY}`)) {
+      touchDown = true;
+      touchingAny = true;
+    }
+    
+    // Check left
+    const leftX = c.x - 1;
+    if (leftX < 0) {
+      touchLeft = true;
+    } else if (board[c.y][leftX] !== null && !set.has(`${leftX},${c.y}`)) {
+      touchLeft = true;
+      touchingAny = true;
+    }
+    
+    // Check right
+    const rightX = c.x + 1;
+    if (rightX >= GRID_SIZE) {
+      touchRight = true;
+    } else if (board[c.y][rightX] !== null && !set.has(`${rightX},${c.y}`)) {
+      touchRight = true;
+      touchingAny = true;
+    }
+    
+    const sidesTouching = (touchUp ? 1 : 0) + (touchDown ? 1 : 0) + 
+                          (touchLeft ? 1 : 0) + (touchRight ? 1 : 0);
+    totalTouchingSides += sidesTouching;
+    
+    if (touchingAny) blocksTouchingAny++;
+    if (sidesTouching === 4) blocksTouchingAll++;
+  }
+  
+  const avgTouchingSides = totalTouchingSides / totalBlocks;
+  const allBlocksTouchingAll = blocksTouchingAll === totalBlocks;
+  const mostBlocksTouching = blocksTouchingAny / totalBlocks;
+  
+  // Perfect: all blocks touching on all 4 sides
+  if (allBlocksTouchingAll) {
+    return { level: "perfect", score: 5 };
+  }
+  
+  // Great: most blocks touching on all sides, or all blocks touching existing
+  if (blocksTouchingAll >= totalBlocks * 0.7 || (mostBlocksTouching >= 0.9 && avgTouchingSides >= 3.5)) {
+    return { level: "great", score: 4 };
+  }
+  
+  // Nice: good contact with existing blocks
+  if (mostBlocksTouching >= 0.6 && avgTouchingSides >= 2.5) {
+    return { level: "nice", score: 3 };
+  }
+  
+  // Okay: some contact with existing blocks
+  if (mostBlocksTouching >= 0.3 || avgTouchingSides >= 2) {
+    return { level: "okay", score: 2 };
+  }
+  
+  // Eh: minimal or no contact
+  return { level: "eh", score: 1 };
 }
 
 function boardCellFromPointer(clientX, clientY) {
@@ -921,6 +1045,9 @@ function onPointerDownPiece(e) {
   e.preventDefault();
   clearGhost();
 
+  // Haptic feedback when picking up a piece
+  hapticPickupPiece();
+
   const dragEl = makeDragGhostEl(piece);
   dragLayerEl.appendChild(dragEl);
   dragLayerEl.setAttribute("aria-hidden", "false");
@@ -991,7 +1118,7 @@ function onPointerUp(e) {
   }
 
   if (!g.ok || !canPlace(piece, g.originX, g.originY)) {
-    vibrate(12);
+    hapticInvalidDrop();
     pulseBoard("invalid-drop", 240);
     clearGhost();
     return;
@@ -1004,7 +1131,7 @@ function onPointerUp(e) {
   if (!placementSuccess) {
     // Placement failed despite validation - this shouldn't happen, but handle it gracefully
     console.error("Placement failed after validation passed");
-    vibrate(12);
+    hapticInvalidDrop();
     pulseBoard("invalid-drop", 240);
     clearGhost();
     return;
@@ -1016,6 +1143,7 @@ function onPointerUp(e) {
   let delta = piece.size;
 
   const perfect = isPerfectPlacement(placedCoords);
+  const placementRating = ratePlacement(placedCoords);
   const cleared = computeFullLines();
   const lines = cleared.rows + cleared.cols;
   if (lines > 0) {
@@ -1046,21 +1174,48 @@ function onPointerUp(e) {
   setScore(score + delta);
   renderBoard();
   clearGhost();
-  pulseBoard("place-impact", 200);
+  pulseBoard("place-impact", 300);
 
-  // Haptics + placed animation
-  if (lines > 0) vibrate([20, 30, 40]);
-  else if (perfect) vibrate([25, 20, 25]);
-  else vibrate(18);
+  // Haptics + placed animation based on rating
+  if (lines > 0) {
+    hapticLineClear(lines);
+  } else {
+    switch (placementRating.level) {
+      case "perfect":
+        hapticPerfectPlacement();
+        break;
+      case "great":
+        vibrate([15, 25, 15]);
+        break;
+      case "nice":
+        vibrate([12, 20, 12]);
+        break;
+      case "okay":
+        vibrate(10);
+        break;
+      default: // "eh"
+        hapticPlacePiece();
+    }
+  }
 
-  addTempClass(placedCoords, "just-placed", 220);
-  if (perfect) addTempClass(placedCoords, "perfect", 520);
+  // Apply animations based on placement rating
+  if (placementRating.level === "perfect") {
+    addTempClass(placedCoords, "perfect", 850);
+    addTempClass(placedCoords, "just-placed", 450);
+  } else if (placementRating.level === "great") {
+    addTempClass(placedCoords, "great-placement", 500);
+  } else if (placementRating.level === "nice") {
+    addTempClass(placedCoords, "nice-placement", 400);
+  } else if (placementRating.level === "okay") {
+    addTempClass(placedCoords, "okay-placement", 300);
+  }
+  // "eh" gets no special animation
 
   // Clear animation (big)
   if (lines > 0) {
     isAnimating = true;
     boardEl.classList.add("line-clear");
-    addTempClass(cleared.coords, "clearing", 340);
+    addTempClass(cleared.coords, "clearing", 650);
 
     window.setTimeout(() => {
       applyClear(cleared.coords);
@@ -1071,7 +1226,7 @@ function onPointerUp(e) {
       maybeDealNewHand();
       renderHand();
       if (!anyMovesAvailable()) showGameOver(true);
-    }, 330);
+    }, 550);
     return;
   }
 
