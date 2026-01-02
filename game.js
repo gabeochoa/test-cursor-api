@@ -38,6 +38,45 @@ function makeEmptyBoard() {
   return Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(null));
 }
 
+function randomFillColor() {
+  // Reuse the piece palette for consistency.
+  return colorForSize(randInt(6) + 1);
+}
+
+function seedBoardRandomBlocks(targetCount = Math.max(6, GRID_SIZE)) {
+  const rowCounts = Array(GRID_SIZE).fill(0);
+  const colCounts = Array(GRID_SIZE).fill(0);
+
+  // Count current fills (should be empty on new game, but keep it robust).
+  for (let y = 0; y < GRID_SIZE; y++) {
+    for (let x = 0; x < GRID_SIZE; x++) {
+      if (board[y][x] !== null) {
+        rowCounts[y] += 1;
+        colCounts[x] += 1;
+      }
+    }
+  }
+
+  const maxPerLine = GRID_SIZE - 1; // avoid starting with an instant clear
+  let placed = 0;
+  let attempts = 0;
+  const maxAttempts = 800;
+
+  while (placed < targetCount && attempts < maxAttempts) {
+    attempts += 1;
+    const x = randInt(GRID_SIZE);
+    const y = randInt(GRID_SIZE);
+    if (board[y][x] !== null) continue;
+    if (rowCounts[y] >= maxPerLine) continue;
+    if (colCounts[x] >= maxPerLine) continue;
+
+    board[y][x] = randomFillColor();
+    rowCounts[y] += 1;
+    colCounts[x] += 1;
+    placed += 1;
+  }
+}
+
 function cellsForShape(shape) {
   // shape: array of [x,y]
   return shape.map(([x, y]) => ({ x, y }));
@@ -362,6 +401,7 @@ function maybeDealNewHand() {
 
 function startNewGame() {
   board = makeEmptyBoard();
+  seedBoardRandomBlocks();
   hand = Array.from({ length: PIECES_PER_ROUND }, () => makePiece());
   combo = 0;
   isAnimating = false;
