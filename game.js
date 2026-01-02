@@ -65,6 +65,8 @@ function updateAITitle() {
     const baseTitle = 'Block Blast';
     titleEl.textContent = isAIMode ? `${baseTitle} 🤖` : baseTitle;
   }
+  // Also update document title
+  document.title = isAIMode ? 'Block Blast 🤖' : 'Block Blast (JS)';
 }
 
 function toggleAIMode() {
