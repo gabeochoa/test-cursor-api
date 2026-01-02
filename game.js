@@ -732,12 +732,26 @@ function pulseBoard(className, ms) {
 function addTempClass(coords, className, ms) {
   for (const c of coords) {
     const el = cellEls[c.y]?.[c.x];
-    if (el) el.classList.add(className);
+    if (el) {
+      el.classList.add(className);
+      // For clearing animation, we want to KEEP the filled appearance
+      // so the flash animation is visible. We'll clear it after animation.
+      if (className === "clearing") {
+        // Don't remove filled class here - let animation show on filled cells
+      }
+    }
   }
   window.setTimeout(() => {
     for (const c of coords) {
       const el = cellEls[c.y]?.[c.x];
-      if (el) el.classList.remove(className);
+      if (el) {
+        el.classList.remove(className);
+        // After clearing animation completes, remove filled appearance
+        if (className === "clearing") {
+          el.classList.remove("filled");
+          el.style.removeProperty("--fill");
+        }
+      }
     }
   }, ms);
 }
@@ -1064,7 +1078,7 @@ function onPointerDownPiece(e) {
     // X axis: moderate scaling (less than Y but more responsive than before)
     moveScaleX: isMobileLayout() ? 1.5 : 1.2,
     // Y axis: increased sensitivity so you don't have to drag as far to reach top
-    moveScaleY: isMobileLayout() ? 2.0 : 1.6,
+    moveScaleY: isMobileLayout() ? 2.2 : 1.9,
   };
   document.addEventListener("pointermove", onPointerMove, { passive: false });
   document.addEventListener("pointerup", onPointerUp, { passive: false });
@@ -1215,18 +1229,22 @@ function onPointerUp(e) {
   if (lines > 0) {
     isAnimating = true;
     boardEl.classList.add("line-clear");
+
+    // Apply clear immediately when animation starts
+    applyClear(cleared.coords);
+
+    // Add clearing animation and ensure cells appear cleared
     addTempClass(cleared.coords, "clearing", 650);
 
     window.setTimeout(() => {
-      applyClear(cleared.coords);
+      // Animation cleanup
       boardEl.classList.remove("line-clear");
-      renderBoard();
       isAnimating = false;
 
       maybeDealNewHand();
       renderHand();
       if (!anyMovesAvailable()) showGameOver(true);
-    }, 550);
+    }, 650); // Wait for full animation to complete
     return;
   }
 
