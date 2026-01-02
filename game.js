@@ -503,9 +503,8 @@ function makeDragGhostEl(piece) {
   const b = bounds(piece.shape);
   const el = document.createElement("div");
   el.className = "drag-ghost piece";
-  el.style.setProperty("--piece-cell", "22px");
-  el.style.gridTemplateColumns = `repeat(${b.w}, var(--piece-cell))`;
-  el.style.gridTemplateRows = `repeat(${b.h}, var(--piece-cell))`;
+  el.style.gridTemplateColumns = `repeat(${b.w}, var(--drag-cell, 26px))`;
+  el.style.gridTemplateRows = `repeat(${b.h}, var(--drag-cell, 26px))`;
   el.style.setProperty("--fill", piece.color);
 
   const on = new Set(piece.shape.map((c) => `${c.x},${c.y}`));
@@ -518,6 +517,20 @@ function makeDragGhostEl(piece) {
     }
   }
   return el;
+}
+
+function isMobileLayout() {
+  return window.matchMedia && window.matchMedia("(max-width: 920px)").matches;
+}
+
+function scaledClientPoint(e, draggingState) {
+  const mult = draggingState?.moveScale || 1;
+  const dx = e.clientX - draggingState.startClientX;
+  const dy = e.clientY - draggingState.startClientY;
+  return {
+    x: draggingState.startClientX + dx * mult,
+    y: draggingState.startClientY + dy * mult,
+  };
 }
 
 function onPointerDownPiece(e) {
@@ -538,7 +551,15 @@ function onPointerDownPiece(e) {
   dragEl.style.left = `${e.clientX}px`;
   dragEl.style.top = `${e.clientY}px`;
 
-  dragging = { pieceIdx: idx, piece, pointerId: e.pointerId, dragEl };
+  dragging = {
+    pieceIdx: idx,
+    piece,
+    pointerId: e.pointerId,
+    dragEl,
+    startClientX: e.clientX,
+    startClientY: e.clientY,
+    moveScale: isMobileLayout() ? 1.8 : 1,
+  };
   document.addEventListener("pointermove", onPointerMove, { passive: false });
   document.addEventListener("pointerup", onPointerUp, { passive: false });
 }
@@ -546,10 +567,11 @@ function onPointerDownPiece(e) {
 function onPointerMove(e) {
   if (!dragging || e.pointerId !== dragging.pointerId) return;
   e.preventDefault();
-  dragging.dragEl.style.left = `${e.clientX}px`;
-  dragging.dragEl.style.top = `${e.clientY}px`;
+  const p = scaledClientPoint(e, dragging);
+  dragging.dragEl.style.left = `${p.x}px`;
+  dragging.dragEl.style.top = `${p.y}px`;
 
-  const g = ghostForPointer(dragging.piece, e.clientX, e.clientY);
+  const g = ghostForPointer(dragging.piece, p.x, p.y);
   if (!g) {
     clearGhost();
     return;
@@ -563,7 +585,8 @@ function onPointerUp(e) {
 
   const handIdx = dragging.pieceIdx;
   const piece = dragging.piece;
-  const g = ghostForPointer(piece, e.clientX, e.clientY);
+  const p = scaledClientPoint(e, dragging);
+  const g = ghostForPointer(piece, p.x, p.y);
   const can = g && canPlace(piece, g.originX, g.originY);
 
   // Cleanup drag UI
