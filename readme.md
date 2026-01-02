@@ -25,7 +25,14 @@ python3 -m http.server 8000 --bind 0.0.0.0
 2) Find your computer’s local IP (LAN):
 
 ```bash
+# Linux:
 hostname -I
+
+# macOS (Wi‑Fi is usually en0):
+ipconfig getifaddr en0
+
+# macOS alternative:
+ifconfig | grep "inet " | grep -v 127.0.0.1
 ```
 
 3) On your phone (on the same Wi‑Fi), open:
