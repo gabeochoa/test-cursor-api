@@ -159,8 +159,17 @@ function makePiece() {
 }
 
 function setScore(next) {
+  const prev = score;
   score = next;
   scoreEl.textContent = String(score);
+  if (score > prev) {
+    // restart animation
+    scoreEl.classList.remove("bump");
+    // force reflow so the animation retriggers
+    // eslint-disable-next-line no-unused-expressions
+    scoreEl.offsetWidth;
+    scoreEl.classList.add("bump");
+  }
   if (score > bestScore) {
     bestScore = score;
     localStorage.setItem(BEST_KEY, String(bestScore));
@@ -623,6 +632,12 @@ function onPointerUp(e) {
     delta += Math.round(
       (lines * 100 + cleared.cells * 2) * (1 + Math.min(combo - 1, 6) * 0.15),
     );
+
+    // Extra bonus for clearing multiple lines at once (2+).
+    if (lines > 1) {
+      // Tuned for 7x7: meaningful, but not runaway.
+      delta += (lines - 1) * 220 + lines * lines * 35;
+    }
   } else {
     combo = 0;
   }

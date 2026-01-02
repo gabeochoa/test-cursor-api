@@ -94,6 +94,16 @@ body {
   font-weight: 800;
 }
 
+#score {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+}
+
+#score.bump {
+  animation: scoreBump 260ms ease-out both;
+}
+
 .btn {
   appearance: none;
   border: 1px solid var(--grid-border);
@@ -380,6 +390,21 @@ body {
   }
 }
 
+@keyframes scoreBump {
+  0% {
+    transform: translateY(0) scale(1);
+    filter: brightness(1);
+  }
+  35% {
+    transform: translateY(-3px) scale(1.10);
+    filter: brightness(1.25);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    filter: brightness(1);
+  }
+}
+
 @media (max-width: 920px) {
   body {
     /* "One screen" on mobile: avoid page scrolling */
@@ -393,7 +418,8 @@ body {
     grid-template-columns: 1fr;
     flex: 1;
     min-height: 0;
-    margin-top: 10px;
+    margin-top: 8px;
+    gap: 10px;
   }
 
   .app {
@@ -419,6 +445,10 @@ body {
 
   .stat-value {
     font-size: 14px;
+  }
+
+  #score {
+    font-size: 18px;
   }
 
   .btn {
@@ -457,7 +487,7 @@ body {
   }
 
   .piece-slot {
-    min-height: 70px;
+    min-height: 78px;
     padding: 8px;
   }
 
