@@ -25,6 +25,10 @@ let combo = 0;
 /** Drag state */
 let dragging = null; // { pieceIdx, piece, pointerId }
 let ghost = null; // { ok, cells: Array<{x,y}> }
+let isAnimating = false;
+
+/** @type {HTMLElement[][]} */
+let cellEls = [];
 
 function randInt(maxExclusive) {
   return Math.floor(Math.random() * maxExclusive);
@@ -172,29 +176,33 @@ function showGameOver(show) {
 function initBoardDom() {
   boardEl.style.setProperty("--grid-size", String(GRID_SIZE));
   boardEl.innerHTML = "";
+  cellEls = [];
   for (let y = 0; y < GRID_SIZE; y++) {
+    const row = [];
     for (let x = 0; x < GRID_SIZE; x++) {
       const cell = document.createElement("div");
       cell.className = "cell";
       cell.dataset.x = String(x);
       cell.dataset.y = String(y);
       boardEl.appendChild(cell);
+      row.push(cell);
     }
+    cellEls.push(row);
   }
 }
 
 function renderBoard() {
-  const cells = boardEl.querySelectorAll(".cell");
-  for (const el of cells) {
-    const x = Number(el.dataset.x);
-    const y = Number(el.dataset.y);
-    const fill = board[y][x];
-    const filled = fill !== null;
-    el.classList.toggle("filled", filled);
-    if (filled) {
-      el.style.setProperty("--fill", fill);
-    } else {
-      el.style.removeProperty("--fill");
+  for (let y = 0; y < GRID_SIZE; y++) {
+    for (let x = 0; x < GRID_SIZE; x++) {
+      const el = cellEls[y][x];
+      const fill = board[y][x];
+      const filled = fill !== null;
+      el.classList.toggle("filled", filled);
+      if (filled) {
+        el.style.setProperty("--fill", fill);
+      } else {
+        el.style.removeProperty("--fill");
+      }
     }
   }
 }
@@ -211,8 +219,7 @@ function drawGhost(cells, ok) {
   clearGhost();
   ghost = { cells, ok };
   for (const c of cells) {
-    const sel = `.cell[data-x="${c.x}"][data-y="${c.y}"]`;
-    const el = boardEl.querySelector(sel);
+    const el = cellEls[c.y]?.[c.x];
     if (el) el.classList.add(ok ? "ghost-ok" : "ghost-bad");
   }
 }
@@ -274,7 +281,7 @@ function placePiece(piece, originX, originY) {
   }
 }
 
-function clearFullLines() {
+function computeFullLines() {
   const rows = [];
   const cols = [];
 
@@ -300,21 +307,27 @@ function clearFullLines() {
     if (full) cols.push(x);
   }
 
-  if (rows.length === 0 && cols.length === 0) return { rows: 0, cols: 0, cells: 0 };
+  if (rows.length === 0 && cols.length === 0)
+    return { rows: 0, cols: 0, cells: 0, coords: [] };
 
-  // Clear union of cells (rows + cols)
+  // Union of cells (rows + cols)
   const toClear = new Set();
   for (const y of rows) for (let x = 0; x < GRID_SIZE; x++) toClear.add(`${x},${y}`);
   for (const x of cols) for (let y = 0; y < GRID_SIZE; y++) toClear.add(`${x},${y}`);
 
+  const coords = [];
   for (const key of toClear) {
     const [xStr, yStr] = key.split(",");
-    const x = Number(xStr);
-    const y = Number(yStr);
-    board[y][x] = null;
+    coords.push({ x: Number(xStr), y: Number(yStr) });
   }
 
-  return { rows: rows.length, cols: cols.length, cells: toClear.size };
+  return { rows: rows.length, cols: cols.length, cells: toClear.size, coords };
+}
+
+function applyClear(coords) {
+  for (const c of coords) {
+    board[c.y][c.x] = null;
+  }
 }
 
 function anyMovesAvailable() {
@@ -342,11 +355,62 @@ function startNewGame() {
   board = makeEmptyBoard();
   hand = Array.from({ length: PIECES_PER_ROUND }, () => makePiece());
   combo = 0;
+  isAnimating = false;
   setScore(0);
   showGameOver(false);
   clearGhost();
+  boardEl.classList.remove("line-clear");
   renderBoard();
   renderHand();
+}
+
+function vibrate(pattern) {
+  if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+    navigator.vibrate(pattern);
+  }
+}
+
+function addTempClass(coords, className, ms) {
+  for (const c of coords) {
+    const el = cellEls[c.y]?.[c.x];
+    if (el) el.classList.add(className);
+  }
+  window.setTimeout(() => {
+    for (const c of coords) {
+      const el = cellEls[c.y]?.[c.x];
+      if (el) el.classList.remove(className);
+    }
+  }, ms);
+}
+
+function isPerfectPlacement(placedCoords) {
+  // "Perfect": the placed piece makes contact on ALL 4 sides (N/S/E/W)
+  // with either the board edge or existing blocks (excluding the piece itself).
+  const set = new Set(placedCoords.map((c) => `${c.x},${c.y}`));
+  let touchUp = false;
+  let touchDown = false;
+  let touchLeft = false;
+  let touchRight = false;
+
+  for (const c of placedCoords) {
+    const upY = c.y - 1;
+    if (upY < 0) touchUp = true;
+    else if (board[upY][c.x] !== null && !set.has(`${c.x},${upY}`)) touchUp = true;
+
+    const downY = c.y + 1;
+    if (downY >= GRID_SIZE) touchDown = true;
+    else if (board[downY][c.x] !== null && !set.has(`${c.x},${downY}`)) touchDown = true;
+
+    const leftX = c.x - 1;
+    if (leftX < 0) touchLeft = true;
+    else if (board[c.y][leftX] !== null && !set.has(`${leftX},${c.y}`)) touchLeft = true;
+
+    const rightX = c.x + 1;
+    if (rightX >= GRID_SIZE) touchRight = true;
+    else if (board[c.y][rightX] !== null && !set.has(`${rightX},${c.y}`)) touchRight = true;
+  }
+
+  return touchUp && touchDown && touchLeft && touchRight;
 }
 
 function boardCellFromPointer(clientX, clientY) {
@@ -463,6 +527,7 @@ function onPointerDownPiece(e) {
   const piece = hand[idx];
   if (!piece) return;
   if (modalEl.classList.contains("show")) return;
+  if (isAnimating) return;
 
   e.preventDefault();
   clearGhost();
@@ -518,19 +583,23 @@ function onPointerUp(e) {
     return;
   }
 
-  // Place + score
+  // Place + animate
+  const placedCoords = piece.shape.map((c) => ({ x: g.originX + c.x, y: g.originY + c.y }));
   placePiece(piece, g.originX, g.originY);
   hand[handIdx] = null;
 
   // Base points: blocks placed
   let delta = piece.size;
 
-  const cleared = clearFullLines();
+  const perfect = isPerfectPlacement(placedCoords);
+  const cleared = computeFullLines();
   const lines = cleared.rows + cleared.cols;
   if (lines > 0) {
     combo += 1;
     // Lines are worth more; combo multiplies gently
-    delta += Math.round((lines * 100 + cleared.cells * 2) * (1 + Math.min(combo - 1, 6) * 0.15));
+    delta += Math.round(
+      (lines * 100 + cleared.cells * 2) * (1 + Math.min(combo - 1, 6) * 0.15),
+    );
   } else {
     combo = 0;
   }
@@ -539,12 +608,36 @@ function onPointerUp(e) {
   renderBoard();
   clearGhost();
 
+  // Haptics + placed animation
+  if (lines > 0) vibrate([20, 30, 40]);
+  else if (perfect) vibrate([25, 20, 25]);
+  else vibrate(18);
+
+  addTempClass(placedCoords, "just-placed", 220);
+  if (perfect) addTempClass(placedCoords, "perfect", 520);
+
+  // Clear animation (big)
+  if (lines > 0) {
+    isAnimating = true;
+    boardEl.classList.add("line-clear");
+    addTempClass(cleared.coords, "clearing", 340);
+
+    window.setTimeout(() => {
+      applyClear(cleared.coords);
+      boardEl.classList.remove("line-clear");
+      renderBoard();
+      isAnimating = false;
+
+      maybeDealNewHand();
+      renderHand();
+      if (!anyMovesAvailable()) showGameOver(true);
+    }, 330);
+    return;
+  }
+
   maybeDealNewHand();
   renderHand();
-
-  if (!anyMovesAvailable()) {
-    showGameOver(true);
-  }
+  if (!anyMovesAvailable()) showGameOver(true);
 }
 
 function wireEvents() {
