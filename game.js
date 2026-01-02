@@ -201,18 +201,8 @@ function makePiece() {
 function setScore(next) {
   const prev = score;
   score = next;
-
-  // Check for flame effects based on score increase
-  if (prev > 0) {
-    const ratio = score / prev;
-    if (ratio >= 3) {
-      // Triple score or more - screen takeover flames
-      triggerFlameEffect(true);
-    } else if (ratio >= 2) {
-      // Double score - regular flames
-      triggerFlameEffect(false);
-    }
-  }
+  
+  // Flame effects are now triggered based on number of lines cleared, not score ratio
 
   if (score > prev) {
     // Animate score counting up
@@ -421,9 +411,18 @@ function canPlace(piece, originX, originY) {
 }
 
 function placePiece(piece, originX, originY) {
+  // Validate bounds before placing
   for (const c of piece.shape) {
     const x = originX + c.x;
     const y = originY + c.y;
+    if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) {
+      console.error("Attempted to place piece out of bounds", { originX, originY, x, y, shape: piece.shape });
+      return;
+    }
+    if (board[y][x] !== null) {
+      console.error("Attempted to place piece on occupied cell", { originX, originY, x, y });
+      return;
+    }
     board[y][x] = piece.color;
   }
 }
@@ -754,42 +753,69 @@ function nearestValidOrigin(piece, desiredOriginX, desiredOriginY) {
   const maxX = GRID_SIZE - b.w;
   const maxY = GRID_SIZE - b.h;
 
-  // Clamp to valid bounds
+  // Clamp to valid bounds for this piece size
   const clampedX = Math.max(minX, Math.min(maxX, desiredOriginX));
   const clampedY = Math.max(minY, Math.min(maxY, desiredOriginY));
 
   // Check if the clamped position is valid
-  if (canPlace(piece, clampedX, clampedY)) {
-    return { x: clampedX, y: clampedY, ok: true };
-  }
-
-  // If clamped position is invalid, return it anyway (ghost will show as invalid)
-  return { x: clampedX, y: clampedY, ok: false };
+  const ok = canPlace(piece, clampedX, clampedY);
+  return { x: clampedX, y: clampedY, ok };
 }
 
 function ghostForPointer(piece, clientX, clientY) {
+  // Calculate which board cell the pointer is over
   const pos = boardCellFromPointer(clientX, clientY);
   if (!pos) return null;
-  // Align shape's top-left to hovered cell.
+  
+  // Find the nearest valid origin for this piece at this cell
   const snapped = nearestValidOrigin(piece, pos.x, pos.y);
-  const originX = snapped.x;
-  const originY = snapped.y;
-  const cells = piece.shape.map((c) => ({ x: originX + c.x, y: originY + c.y }));
-  const ok = snapped.ok;
-  // If out of bounds, canPlace already false, but filter to visible cells for highlighting.
+  
+  // Calculate all cells this piece would occupy
+  const cells = piece.shape.map((c) => ({ 
+    x: snapped.x + c.x, 
+    y: snapped.y + c.y 
+  }));
+  
+  // Filter to only visible cells (for ghost highlighting)
   const visible = cells.filter(
     (c) => c.x >= 0 && c.x < GRID_SIZE && c.y >= 0 && c.y < GRID_SIZE,
   );
-  return { ok, originX, originY, cells: visible, rawCells: cells };
+  
+  return { 
+    ok: snapped.ok, 
+    originX: snapped.x, 
+    originY: snapped.y, 
+    cells: visible, 
+    rawCells: cells 
+  };
 }
 
 function makeDragGhostEl(piece) {
   const b = bounds(piece.shape);
+  
+  // Calculate actual board cell size to match the drop zone
+  const boardRect = boardEl.getBoundingClientRect();
+  const styles = getComputedStyle(boardEl);
+  const padL = parseFloat(styles.paddingLeft) || 0;
+  const padR = parseFloat(styles.paddingRight) || 0;
+  const padT = parseFloat(styles.paddingTop) || 0;
+  const padB = parseFloat(styles.paddingBottom) || 0;
+  const gap = parseFloat(styles.gap) || 3;
+  
+  const innerW = Math.max(1, boardRect.width - padL - padR);
+  const innerH = Math.max(1, boardRect.height - padT - padB);
+  
+  // Calculate cell size (accounting for gaps between cells)
+  const cellW = (innerW - (GRID_SIZE - 1) * gap) / GRID_SIZE;
+  const cellH = (innerH - (GRID_SIZE - 1) * gap) / GRID_SIZE;
+  const cellSize = Math.min(cellW, cellH);
+  
   const el = document.createElement("div");
   el.className = "drag-ghost piece";
-  el.style.gridTemplateColumns = `repeat(${b.w}, var(--drag-cell, 26px))`;
-  el.style.gridTemplateRows = `repeat(${b.h}, var(--drag-cell, 26px))`;
+  el.style.gridTemplateColumns = `repeat(${b.w}, ${cellSize}px)`;
+  el.style.gridTemplateRows = `repeat(${b.h}, ${cellSize}px)`;
   el.style.setProperty("--fill", piece.color);
+  el.style.setProperty("--piece-gap", `${gap}px`);
 
   const on = new Set(piece.shape.map((c) => `${c.x},${c.y}`));
   for (let y = 0; y < b.h; y++) {
@@ -869,11 +895,13 @@ function onPointerDownPiece(e) {
 function onPointerMove(e) {
   if (!dragging || e.pointerId !== dragging.pointerId) return;
   e.preventDefault();
+  
+  // Update visual drag element position with scaled coordinates
   const p = scaledClientPoint(e, dragging);
   dragging.dragEl.style.left = `${p.x}px`;
   dragging.dragEl.style.top = `${p.y}px`;
 
-  // Use scaled coordinates so the drop target matches the visual position of the drag ghost
+  // Use scaled coordinates for ghost calculation so drop zone matches visual drag element
   const g = ghostForPointer(dragging.piece, p.x, p.y);
   if (!g) {
     clearGhost();
@@ -888,31 +916,32 @@ function onPointerUp(e) {
 
   const handIdx = dragging.pieceIdx;
   const piece = dragging.piece;
+  
+  // Use scaled coordinates for placement so it matches the visual drag element and ghost
   const p = scaledClientPoint(e, dragging);
-  // Use scaled coordinates so placement matches the visual position of the drag ghost
   const g = ghostForPointer(piece, p.x, p.y);
-  const can = g && canPlace(piece, g.originX, g.originY);
 
-  // Cleanup drag UI
+  // Cleanup drag UI first
   dragging.dragEl.remove();
   dragLayerEl.setAttribute("aria-hidden", "true");
   dragging = null;
   document.removeEventListener("pointermove", onPointerMove);
   document.removeEventListener("pointerup", onPointerUp);
 
+  // Validate placement
   if (!g) {
     clearGhost();
     return;
   }
 
-  if (!can) {
+  if (!g.ok || !canPlace(piece, g.originX, g.originY)) {
     vibrate(12);
     pulseBoard("invalid-drop", 240);
     clearGhost();
     return;
   }
 
-  // Place + animate
+  // Place the piece
   const placedCoords = piece.shape.map((c) => ({ x: g.originX + c.x, y: g.originY + c.y }));
   placePiece(piece, g.originX, g.originY);
   hand[handIdx] = null;
@@ -934,6 +963,15 @@ function onPointerUp(e) {
     if (lines > 1) {
       // Tuned for 7x7: meaningful, but not runaway.
       delta += (lines - 1) * 220 + lines * lines * 35;
+      
+      // Trigger flame overlay only when multiple lines (2+) are cleared
+      if (lines >= 3) {
+        // 3+ lines = screen takeover flames
+        triggerFlameEffect(true);
+      } else {
+        // 2 lines = regular flames
+        triggerFlameEffect(false);
+      }
     }
   } else {
     combo = 0;
