@@ -38,7 +38,7 @@ let flameTimeoutId = null; // Track flame effect timeout
 /** AI mode state */
 let isAIMode = false;
 let aiIntervalId = null;
-let aiPlacementDelay = 800; // ms between AI placements
+let aiPlacementDelay = 1000; // ms between AI placements
 
 function randInt(maxExclusive) {
   return Math.floor(Math.random() * maxExclusive);
@@ -936,7 +936,7 @@ function ratePlacement(placedCoords) {
 
 function boardCellFromPointer(clientX, clientY) {
   const rect = boardEl.getBoundingClientRect();
-  
+
   const styles = getComputedStyle(boardEl);
   const padL = parseFloat(styles.paddingLeft) || 0;
   const padR = parseFloat(styles.paddingRight) || 0;
@@ -983,6 +983,30 @@ function boardCellFromPointer(clientX, clientY) {
 
   const x = Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(clampedRelX / cellW)));
   return { x, y };
+}
+
+function clientCoordsFromBoardCell(boardX, boardY) {
+  const rect = boardEl.getBoundingClientRect();
+
+  const styles = getComputedStyle(boardEl);
+  const padL = parseFloat(styles.paddingLeft) || 0;
+  const padT = parseFloat(styles.paddingTop) || 0;
+
+  const innerW = Math.max(1, rect.width - padL - parseFloat(styles.paddingRight || 0));
+  const innerH = Math.max(1, rect.height - padT - parseFloat(styles.paddingBottom || 0));
+
+  const cellW = innerW / GRID_SIZE;
+  const cellH = innerH / GRID_SIZE;
+
+  // Calculate center of the target cell
+  const relX = boardX * cellW + cellW / 2;
+  const relY = boardY * cellH + cellH / 2;
+
+  // Convert to client coordinates
+  const clientX = relX + rect.left + padL;
+  const clientY = relY + rect.top + padT;
+
+  return { clientX, clientY };
 }
 
 function nearestValidOrigin(piece, desiredOriginX, desiredOriginY) {
@@ -1191,11 +1215,14 @@ function onPointerUp(e) {
   }
 
   if (!g.ok || !canPlace(piece, g.originX, g.originY)) {
+    console.log('❌ Invalid placement - ghost not OK or cannot place');
     hapticInvalidDrop();
     pulseBoard("invalid-drop", 240);
     clearGhost();
     return;
   }
+
+  console.log('✅ Valid placement - proceeding with placement');
 
   // Place the piece - only remove from hand if placement succeeds
   const placedCoords = piece.shape.map((c) => ({ x: g.originX + c.x, y: g.originY + c.y }));
@@ -1358,6 +1385,77 @@ function findBestPlacement(piece) {
   return bestPlacement;
 }
 
+function simulateAIDrag(pieceIdx, targetOriginX, targetOriginY) {
+  const pieceSlot = document.querySelector(`.piece-slot[data-idx="${pieceIdx}"]`);
+  if (!pieceSlot) {
+    console.log(`🤖 AI: Could not find piece slot ${pieceIdx}`);
+    return false;
+  }
+
+  // Get the center of the piece slot for the initial pointer down
+  const slotRect = pieceSlot.getBoundingClientRect();
+  const startX = slotRect.left + slotRect.width / 2;
+  const startY = slotRect.top + slotRect.height / 2;
+
+  // Get the desired final position coordinates
+  const { clientX: desiredX, clientY: desiredY } = clientCoordsFromBoardCell(targetOriginX, targetOriginY);
+
+  // Account for movement scaling - solve for the pointer coordinates that will result in desired final position
+  // finalX = startX + (pointerX - startX) * scaleX
+  // desiredX = startX + (pointerX - startX) * scaleX
+  // desiredX - startX = (pointerX - startX) * scaleX
+  // (desiredX - startX) / scaleX = pointerX - startX
+  // pointerX = startX + (desiredX - startX) / scaleX
+
+  const scaleX = isMobileLayout() ? 1.5 : 1.2;
+  const scaleY = isMobileLayout() ? 2.2 : 1.9;
+
+  const pointerX = startX + (desiredX - startX) / scaleX;
+  const pointerY = startY + (desiredY - startY) / scaleY;
+
+
+  // Create fake pointer events
+  const pointerId = Date.now(); // Unique pointer ID
+
+  // 1. Pointer down on the piece
+  const downEvent = new PointerEvent('pointerdown', {
+    clientX: startX,
+    clientY: startY,
+    pointerId: pointerId,
+    bubbles: true,
+    cancelable: true
+  });
+  pieceSlot.dispatchEvent(downEvent);
+
+  // Small delay to let the drag start
+  setTimeout(() => {
+    // 2. Pointer move to target position (using scaled coordinates)
+    const moveEvent = new PointerEvent('pointermove', {
+      clientX: pointerX,
+      clientY: pointerY,
+      pointerId: pointerId,
+      bubbles: true,
+      cancelable: true
+    });
+    document.dispatchEvent(moveEvent);
+
+    // Another small delay before releasing
+    setTimeout(() => {
+      // 3. Pointer up to complete the placement
+      const upEvent = new PointerEvent('pointerup', {
+        clientX: pointerX,
+        clientY: pointerY,
+        pointerId: pointerId,
+        bubbles: true,
+        cancelable: true
+      });
+      document.dispatchEvent(upEvent);
+    }, 200); // Brief pause at target position
+  }, 100); // Brief pause after starting drag
+
+  return true;
+}
+
 function aiMakeMove() {
   if (!isAIMode || isAnimating || modalEl.classList.contains("show")) {
     return;
@@ -1385,84 +1483,10 @@ function aiMakeMove() {
     current.rating.score > best.rating.score ? current : best
   );
 
-  console.log(`🤖 AI placing piece ${bestPlacement.pieceIdx} at (${bestPlacement.originX}, ${bestPlacement.originY}) - Rating: ${bestPlacement.rating.level} (${bestPlacement.rating.score})`);
+  console.log(`🤖 AI dragging piece ${bestPlacement.pieceIdx} to (${bestPlacement.originX}, ${bestPlacement.originY}) - Rating: ${bestPlacement.rating.level} (${bestPlacement.rating.score})`);
 
-  // Simulate the placement
-  const success = placePiece(bestPlacement.piece, bestPlacement.originX, bestPlacement.originY);
-  if (success) {
-    hand[bestPlacement.pieceIdx] = null;
-
-    // Calculate scoring and effects (same as manual placement)
-    const placedCoords = bestPlacement.piece.shape.map(c => ({
-      x: bestPlacement.originX + c.x,
-      y: bestPlacement.originY + c.y
-    }));
-
-    // Base points: blocks placed
-    let delta = bestPlacement.piece.size;
-
-    const perfect = isPerfectPlacement(placedCoords);
-    const placementRating = bestPlacement.rating;
-    const cleared = computeFullLines();
-    const lines = cleared.rows + cleared.cols;
-
-    if (lines > 0) {
-      combo += 1;
-      // Lines are worth more; combo multiplies gently
-      delta += Math.round(
-        (lines * 100 + cleared.cells * 2) * (1 + Math.min(combo - 1, 6) * 0.15)
-      );
-
-      // Extra bonus for clearing multiple lines at once (2+).
-      if (lines > 1) {
-        delta += (lines - 1) * 220 + lines * lines * 35;
-
-        if (lines >= 3) {
-          triggerFlameEffect(true);
-        } else {
-          triggerFlameEffect(false);
-        }
-      }
-    } else {
-      combo = 0;
-    }
-
-    setScore(score + delta);
-    renderBoard();
-
-    // Apply animations based on placement rating
-    if (placementRating.level === "perfect") {
-      addTempClass(placedCoords, "perfect", 850);
-      addTempClass(placedCoords, "just-placed", 450);
-    } else if (placementRating.level === "great") {
-      addTempClass(placedCoords, "great-placement", 500);
-    } else if (placementRating.level === "nice") {
-      addTempClass(placedCoords, "nice-placement", 400);
-    } else if (placementRating.level === "okay") {
-      addTempClass(placedCoords, "okay-placement", 300);
-    }
-
-    // Handle line clearing
-    if (lines > 0) {
-      isAnimating = true;
-      boardEl.classList.add("line-clear");
-      addTempClass(cleared.coords, "clearing", 650);
-
-      applyClear(cleared.coords);
-
-      setTimeout(() => {
-        boardEl.classList.remove("line-clear");
-        isAnimating = false;
-        maybeDealNewHand();
-        renderHand();
-        if (!anyMovesAvailable()) showGameOver(true);
-      }, 650);
-    } else {
-      maybeDealNewHand();
-      renderHand();
-      if (!anyMovesAvailable()) showGameOver(true);
-    }
-  }
+  // Simulate the drag instead of direct placement
+  simulateAIDrag(bestPlacement.pieceIdx, bestPlacement.originX, bestPlacement.originY);
 }
 
 function startAI() {
