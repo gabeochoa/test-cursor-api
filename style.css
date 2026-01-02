@@ -468,13 +468,13 @@ body {
     grid-template-columns: 1fr;
     flex: 1;
     min-height: 0;
-    margin-top: 8px;
-    gap: 10px;
+    margin-top: 6px;
+    gap: 8px;
   }
 
   .app {
     height: 100dvh;
-    padding: 10px;
+    padding: 8px;
     display: flex;
     flex-direction: column;
   }
@@ -510,12 +510,17 @@ body {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     justify-content: center;
   }
 
   .board {
-    --board-size: min(94vw, 52dvh);
+    /* Full width board on mobile, keep it square */
+    width: 100%;
+    max-width: none;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    padding: 8px;
   }
 
   .hint {
@@ -523,7 +528,7 @@ body {
   }
 
   .side .panel {
-    padding: 10px;
+    padding: 8px;
     width: 100%;
   }
 
@@ -545,10 +550,10 @@ body {
   }
 
   :root {
-    /* Make tray pieces bigger on mobile */
-    --piece-cell: 18px;
+    /* Full-width tray: scale pieces up to fill */
+    --piece-cell: clamp(16px, 5.2vw, 24px);
     --piece-gap: 4px;
-    --piece-slot-h: 86px;
+    --piece-slot-h: clamp(78px, 14vw, 110px);
   }
 
   .drag-ghost {
